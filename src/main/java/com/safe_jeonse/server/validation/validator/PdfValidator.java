@@ -3,7 +3,6 @@ package com.safe_jeonse.server.validation.validator;
 import com.safe_jeonse.server.validation.annotation.ValidPdf;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import org.apache.tika.*;

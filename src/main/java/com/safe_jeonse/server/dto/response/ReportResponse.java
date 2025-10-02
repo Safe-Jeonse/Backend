@@ -1,4 +1,4 @@
-package com.safe_jeonse.server.dto.reponse;
+package com.safe_jeonse.server.dto.response;
 
 public record ReportResponse(String message) {
 }

@@ -1,8 +1,12 @@
 package com.safe_jeonse.server.dto.request;
 
 
+import com.safe_jeonse.server.validation.annotation.ValidAddress;
 import com.safe_jeonse.server.validation.annotation.ValidPdf;
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,14 +18,15 @@ public class ReportRequest {
     public static final long MAX_LEASE_DEPOSIT = 10_000_000_000L;
     public static final String KOREAN_NAME_REGEX_STRICT = "^[가-힣]{2,4}$";
 
-    @NotBlank
+    @NotBlank(message = "주소를 입력해 주세요.")
+    @ValidAddress
     private String address;
 
-    @Max(MAX_LEASE_DEPOSIT)
-    @NotNull
+    @Max(value = MAX_LEASE_DEPOSIT, message = "임대 보증금은 100억 이하로 입력해주세요.")
+    @NotNull(message = "전세 보증금을 입력해 주세요.")
     private Long leaseDeposit;
 
-    @Pattern(regexp = KOREAN_NAME_REGEX_STRICT)
+    @Pattern(regexp = KOREAN_NAME_REGEX_STRICT, message = "이름을 2 ~ 4 글자의 한글로 입력해주세요.")
     private String landlord;
 
     @ValidPdf
