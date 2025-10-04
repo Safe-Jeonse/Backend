@@ -9,3 +9,14 @@ spring:
   docker:
     compose:
       enabled: false
+
+  openai:
+    api-key: ${OPENAI_API_KEY}
+    model: gpt-4
+
+  prompts:
+      deep-prompt: |
+      
+
+      quick-prompt: |
+      
