@@ -1,6 +1,6 @@
 package com.safe_jeonse.server.dto;
 
-import com.safe_jeonse.server.dto.response.OcrResultDto;
+import com.safe_jeonse.server.dto.response.ParseResultDto;
 import lombok.Getter;
 
 @Getter
@@ -12,5 +12,5 @@ public class PromptDto {
 
     private String landlord;
 
-    private OcrResultDto ocrResultDto;
+    private ParseResultDto parseResultDto;
 }

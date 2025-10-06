@@ -20,7 +20,7 @@ public class PromptManger {
     private final MustacheFactory mustacheFactory = new DefaultMustacheFactory();
 
     public String generatePrompt(PromptDto promptDto) {
-        if (promptDto.getOcrResultDto() == null) {
+        if (promptDto.getParseResultDto() == null) {
             return getQuickCheckPrompt(promptDto);
         } else {
             return getDeepCheckPrompt(promptDto);

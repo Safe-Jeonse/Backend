@@ -11,6 +11,6 @@ import org.springframework.stereotype.Service;
 public class AddressValidationService {
 
     public boolean validateAddress(String address) {
-        return false;
+        return true;
     }
 }
