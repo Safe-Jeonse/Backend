@@ -6,20 +6,27 @@ spring:
       enabled: true
       max-file-size: 100MB
       max-request-size: 100MB
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      base-url: https://api.groq.com/openai
+      chat:
+        options:
+          model: meta-llama/llama-4-scout-17b-16e-instruct
+          temperature: 0.7
+          max-tokens: 2000
   docker:
     compose:
       enabled: false
 
-  openai:
-    api-key: ${OPENAI_API_KEY}
-    model: gpt-4
+prompts:
+  deep-prompt: |
+    "안녕"
+    임대인:{{landlord}}
 
-  prompts:
-      deep-prompt: |
-      
+  quick-prompt: |
+    "안녕"
 
-      quick-prompt: |
-      
 logging:
   level:
     com.safe_jeonse.server.service.PdfParseService: DEBUG

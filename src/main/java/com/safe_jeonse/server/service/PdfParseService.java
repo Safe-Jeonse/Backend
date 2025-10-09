@@ -334,7 +334,6 @@ public class PdfParseService {
 
         List<ParseResultDto.OwnershipHistory> list = new ArrayList<>();
         List<int[]> ranges = locateEntryRanges(gapguText, ENTRY_HEAD_GAPGU);
-        log.debug("GAPGU entries detected: {}", ranges.size());
 
         for (int[] rg : ranges) {
             String chunk = gapguText.substring(rg[0], rg[1]);

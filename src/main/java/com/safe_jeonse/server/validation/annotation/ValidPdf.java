@@ -10,7 +10,6 @@ import java.lang.annotation.*;
 @Constraint(validatedBy = PdfValidator.class)
 @Target({ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
-
 public @interface ValidPdf {
     String message() default "유효한 PDF 파일이어야 합니다.";
     Class<?>[] groups() default {};
