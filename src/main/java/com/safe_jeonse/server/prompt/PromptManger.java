@@ -18,6 +18,9 @@ public class PromptManger {
     @Value("${prompts.quick-prompt}")
     private String quickPromptTemplate;
 
+    @Value("${prompts.system}")
+    private String systemPromptTemplate;
+
     private final MustacheFactory mustacheFactory = new DefaultMustacheFactory();
 
     public String getDeepCheckPrompt(PromptDto promptDto) {
@@ -26,6 +29,10 @@ public class PromptManger {
 
     public String getQuickCheckPrompt(PromptDto promptDto) {
         return renderTemplate(quickPromptTemplate, promptDto);
+    }
+
+    public String getSystemPrompt(PromptDto promptDto) {
+        return renderTemplate(systemPromptTemplate, promptDto);
     }
 
     private String renderTemplate(String template, Object context) {

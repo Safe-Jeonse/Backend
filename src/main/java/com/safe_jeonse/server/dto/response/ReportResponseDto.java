@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Builder
-public record ReportResponse(
+public record ReportResponseDto(
         UUID reportId,
         Boolean analysisType,
         String overallRiskLevel,
