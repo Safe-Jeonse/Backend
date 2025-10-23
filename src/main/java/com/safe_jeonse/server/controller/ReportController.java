@@ -1,6 +1,7 @@
 package com.safe_jeonse.server.controller;
 
 import com.safe_jeonse.server.dto.request.ReportRequest;
+import com.safe_jeonse.server.service.AddressValidationService;
 import com.safe_jeonse.server.service.ReportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,9 +18,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReportController {
 
     private final ReportService reportService;
+    private final AddressValidationService addressValidationService;
 
     @PostMapping(value = "/api/report", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<String> generateReport(@Valid @ModelAttribute ReportRequest request) {
+
+        if(!addressValidationService.validateAddress(request.getAddress())) {
+            throw new IllegalArgumentException("잘못된 도로명 주소입니다.");
+        }
 
         String result = reportService.generateReport(request);
         return ResponseEntity.ok(result);
