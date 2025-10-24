@@ -21,11 +21,13 @@ public class DeepCheckService {
 
     private final ChatModel chatModel;
     private final PromptManger promptManger;
+    private final BuildingLedgerAnalysisService buildingLedgerAnalysisService;
 
     public String deepCheck(PromptDto promptDto) {
 
         String systemPrompt = promptManger.getSystemPrompt(promptDto);
         String userPrompt = promptManger.getDeepCheckPrompt(promptDto);
+        buildingLedgerAnalysisService.result(promptDto.getAddress());
         log.info("생성된 시스템 프롬프트: {}", systemPrompt);
         log.info("생성된 사용자 프롬프트: {}", userPrompt);
         try {

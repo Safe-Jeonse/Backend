@@ -18,6 +18,11 @@ spring:
   open-data:
       address-api-key: ${ADDRESS_API_KEY}
       address-url: ${ADDRESS_URL}
+      SGIS-key: ${SGIS_KEY}
+      SGIS-secret: ${SGIS_SECRET}
+      SGIS-token-url: ${SGIS_TOKEN_URL}
+      SGIS-code-url: ${SGIS_CODE_URL}
+
   docker:
     compose:
       enabled: false

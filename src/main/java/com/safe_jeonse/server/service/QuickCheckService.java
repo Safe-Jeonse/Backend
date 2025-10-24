@@ -21,12 +21,14 @@ public class QuickCheckService {
 
     private final ChatModel chatModel;
     private final PromptManger promptManger;
+    private final BuildingLedgerAnalysisService buildingLedgerAnalysisService;
 
     public String quickCheck(PromptDto promptDto) {
         log.info("QuickCheck 분석 시작");
 
         String systemPrompt = promptManger.getSystemPrompt(promptDto);
         String userPrompt = promptManger.getQuickCheckPrompt(promptDto);
+        buildingLedgerAnalysisService.result(promptDto.getAddress());
         log.debug("생성된 시스템 프롬프트: {}", systemPrompt);
         log.debug("생성된 사용자 프롬프트: {}", userPrompt);
 
