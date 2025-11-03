@@ -1,73 +1,103 @@
 package com.safe_jeonse.server.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Data;
 
 import java.util.List;
 
-@Data
-public class AddressResponse {
-    @JsonProperty("results")
-    private Results results;
+public record AddressResponse(
+        @JsonProperty("results") Results results
+) {
+    public Results getResults() {
+        return results;
+    }
 
-    @Data
-    public static class Results {
-        @JsonProperty("common")
-        private Common common;
-
-        @JsonProperty("juso")
-        private List<Juso> juso;
-
+    public record Results(
+            @JsonProperty("common") Common common,
+            @JsonProperty("juso") List<Juso> juso
+    ) {
         public int getTotalCount() {
-            return Integer.parseInt(common.getTotalCount());
+            try {
+                return Integer.parseInt(common.getTotalCount());
+            } catch (Exception e) {
+                return 0;
+            }
+        }
+
+        public Common getCommon() {
+            return common;
+        }
+
+        public List<Juso> getJuso() {
+            return juso;
         }
     }
 
-    @Data
-    public static class Common {
-        @JsonProperty("totalCount")
-        private String totalCount;
+    public record Common(
+            @JsonProperty("totalCount") String totalCount,
+            @JsonProperty("currentPage") int currentPage,
+            @JsonProperty("countPerPage") int countPerPage,
+            @JsonProperty("errorCode") String errorCode,
+            @JsonProperty("errorMessage") String errorMessage
+    ) {
+        public String getTotalCount() {
+            return totalCount;
+        }
 
-        @JsonProperty("currentPage")
-        private int currentPage;
+        public int getCurrentPage() {
+            return currentPage;
+        }
 
-        @JsonProperty("countPerPage")
-        private int countPerPage;
+        public int getCountPerPage() {
+            return countPerPage;
+        }
 
-        @JsonProperty("errorCode")
-        private String errorCode;
+        public String getErrorCode() {
+            return errorCode;
+        }
 
-        @JsonProperty("errorMessage")
-        private String errorMessage;
+        public String getErrorMessage() {
+            return errorMessage;
+        }
     }
 
-    @Data
-    public static class Juso {
-        @JsonProperty("roadAddr")
-        private String roadAddr;
+    public record Juso(
+            @JsonProperty("roadAddr") String roadAddr,
+            @JsonProperty("roadAddrPart1") String roadAddrPart1,
+            @JsonProperty("roadAddrPart2") String roadAddrPart2,
+            @JsonProperty("jibunAddr") String jibunAddr,
+            @JsonProperty("zipNo") String zipNo,
+            @JsonProperty("bdNm") String buildingName,
+            @JsonProperty("siNm") String siName,
+            @JsonProperty("sggNm") String sggName,
+            @JsonProperty("emdNm") String emdName,
+            @JsonProperty("liNm") String liNm,
+            @JsonProperty("rn") String rn,
+            @JsonProperty("udrtYn") String udrtYn,
+            @JsonProperty("buldMnnm") String buldMnnm,
+            @JsonProperty("buldSlno") String buldSlno,
+            @JsonProperty("mtYn") String mtYn,
+            @JsonProperty("lnbrMnnm") String lnbrMnnm,
+            @JsonProperty("lnbrSlno") String lnbrSlno,
+            @JsonProperty("emdNo") String emdNo
+    ) {
+        public String getRoadAddr() { return roadAddr; }
+        public String getRoadAddrPart1() { return roadAddrPart1; }
+        public String getRoadAddrPart2() { return roadAddrPart2; }
+        public String getJibunAddr() { return jibunAddr; }
+        public String getZipNo() { return zipNo; }
+        public String getBuildingName() { return buildingName; }
+        public String getSiName() { return siName; }
+        public String getSggName() { return sggName; }
+        public String getEmdName() { return emdName; }
 
-        @JsonProperty("roadAddrPart1")
-        private String roadAddrPart1;
-
-        @JsonProperty("roadAddrPart2")
-        private String roadAddrPart2;
-
-        @JsonProperty("jibunAddr")
-        private String jibunAddr;
-
-        @JsonProperty("zipNo")
-        private String zipNo;
-
-        @JsonProperty("bdNm")
-        private String buildingName;
-
-        @JsonProperty("siNm")
-        private String siName;
-
-        @JsonProperty("sggNm")
-        private String sggName;
-
-        @JsonProperty("emdNm")
-        private String emdName;
+        public String getLiNm() { return liNm; }
+        public String getRn() { return rn; }
+        public String getUdrtYn() { return udrtYn; }
+        public String getBuldMnnm() { return buldMnnm; }
+        public String getBuldSlno() { return buldSlno; }
+        public String getMtYn() { return mtYn; }
+        public String getLnbrMnnm() { return lnbrMnnm; }
+        public String getLnbrSlno() { return lnbrSlno; }
+        public String getEmdNo() { return emdNo; }
     }
 }

@@ -79,5 +79,7 @@ public record JusoApiResponse(
 
             @JsonProperty("jibun_main_no")
             String jibunMainNo
-    ) {}
+    ) {
+        public String getLegCd() { return legCd; }
+    }
 }

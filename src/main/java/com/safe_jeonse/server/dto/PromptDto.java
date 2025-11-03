@@ -19,6 +19,10 @@ public class PromptDto {
 
     private ParseResultDto parseResultDto;
 
+    private String buildingLedgerResult;
+
+    private String marketPrice;
+
     // ReportRequest로부터 PromptDto 생성 (파일 없는 경우)
     public static PromptDto fromRequest(ReportRequest request) {
         return PromptDto.builder()
@@ -26,6 +30,8 @@ public class PromptDto {
                 .leaseDeposit(request.getLeaseDeposit())
                 .landlord(request.getLandlord())
                 .parseResultDto(null)
+                .buildingLedgerResult(null)
+                .marketPrice(null)
                 .build();
     }
 
@@ -36,6 +42,8 @@ public class PromptDto {
                 .leaseDeposit(request.getLeaseDeposit())
                 .landlord(request.getLandlord())
                 .parseResultDto(parseResultDto)
+                .buildingLedgerResult(null)
+                .marketPrice(null)
                 .build();
     }
 }

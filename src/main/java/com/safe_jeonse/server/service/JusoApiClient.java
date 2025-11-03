@@ -50,4 +50,6 @@ public class JusoApiClient {
             throw new RuntimeException("SGIS 코드 요청 실패: " + response.getStatusCode());
         }
     }
+
+
 }

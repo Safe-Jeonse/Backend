@@ -22,6 +22,10 @@ spring:
       SGIS-secret: ${SGIS_SECRET}
       SGIS-token-url: ${SGIS_TOKEN_URL}
       SGIS-code-url: ${SGIS_CODE_URL}
+      BL-expos-url: ${BL_EXPOSE_URL}
+      BL-title-url: ${BL_TITLE_URL}
+      open-data-key: ${OPEN_DATA_KEY}
+
 
   docker:
     compose:

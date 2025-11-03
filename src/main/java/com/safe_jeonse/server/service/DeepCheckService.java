@@ -13,6 +13,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -25,23 +27,44 @@ public class DeepCheckService {
 
     public String deepCheck(PromptDto promptDto) {
 
-        String systemPrompt = promptManger.getSystemPrompt(promptDto);
-        String userPrompt = promptManger.getDeepCheckPrompt(promptDto);
-        buildingLedgerAnalysisService.result(promptDto.getAddress());
-        log.info("생성된 시스템 프롬프트: {}", systemPrompt);
-        log.info("생성된 사용자 프롬프트: {}", userPrompt);
+        // buildingLedgerResult를 비동기로 요청하고 짧은 타임아웃(5초)으로 기다림.
+        CompletableFuture<String> future = buildingLedgerAnalysisService.buildingLedgerResultAsync(promptDto.getAddress());
+
+        String builderLedgerResult;
         try {
-            Prompt prompt = new Prompt(List.of(
-                    new SystemMessage(systemPrompt),
-                    new UserMessage(userPrompt)
-            ));
-
-            ChatResponse response = chatModel.call(prompt);
-
-            return response.getResult().getOutput().toString();
+            builderLedgerResult = future.get(5000, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
-            log.error("AI API 호출 중 오류 발생", e);
-            throw new AiApiException("AI 분석 중 오류가 발생했습니다.", e);
+            log.warn("buildingLedgerResult 호출이 지연/실패하여 폴백값 사용(DeepCheck): {}", e.toString());
+            builderLedgerResult = "건축물 대장 분석 결과를 불러오는 데 실패했습니다.";
+            future.cancel(true);
         }
+
+        // PromptDto에 빌딩대장 결과를 주입한 새 DTO를 생성
+        PromptDto dtoWithLedger = PromptDto.builder()
+                .address(promptDto.getAddress())
+                .leaseDeposit(promptDto.getLeaseDeposit())
+                .landlord(promptDto.getLandlord())
+                .parseResultDto(promptDto.getParseResultDto())
+                .buildingLedgerResult(builderLedgerResult)
+                .build();
+
+        String systemPrompt = promptManger.getSystemPrompt(dtoWithLedger);
+        String userPrompt = promptManger.getDeepCheckPrompt(dtoWithLedger);
+//        log.info("생성된 시스템 프롬프트: {}", systemPrompt);
+//        log.info("생성된 사용자 프롬프트: {}", userPrompt);
+//        try {
+//            Prompt prompt = new Prompt(List.of(
+//                    new SystemMessage(systemPrompt),
+//                    new UserMessage(userPrompt)
+//            ));
+//
+//            ChatResponse response = chatModel.call(prompt);
+//
+//            return response.getResult().getOutput().toString();
+//        } catch (Exception e) {
+//            log.error("AI API 호출 중 오류 발생", e);
+//            throw new AiApiException("AI 분석 중 오류가 발생했습니다.", e);
+//        }
+        return null;
     }
 }
