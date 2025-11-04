@@ -44,6 +44,7 @@ public class QuickCheckService {
                 .address(promptDto.getAddress())
                 .leaseDeposit(promptDto.getLeaseDeposit())
                 .landlord(promptDto.getLandlord())
+                .localDateTime(promptDto.getLocalDateTime())
                 .parseResultDto(promptDto.getParseResultDto())
                 .buildingLedgerResult(builderLedgerResult)
                 .build();

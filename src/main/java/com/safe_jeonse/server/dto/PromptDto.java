@@ -6,6 +6,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+
 @Getter
 @Builder
 @AllArgsConstructor
@@ -16,6 +19,8 @@ public class PromptDto {
     private Long leaseDeposit;
 
     private String landlord;
+
+    private LocalDateTime localDateTime;
 
     private ParseResultDto parseResultDto;
 
@@ -29,6 +34,7 @@ public class PromptDto {
                 .address(request.getAddress())
                 .leaseDeposit(request.getLeaseDeposit())
                 .landlord(request.getLandlord())
+                .localDateTime(LocalDateTime.now(ZoneId.of("Asia/Seoul")))
                 .parseResultDto(null)
                 .buildingLedgerResult(null)
                 .marketPrice(null)
@@ -41,6 +47,7 @@ public class PromptDto {
                 .address(request.getAddress())
                 .leaseDeposit(request.getLeaseDeposit())
                 .landlord(request.getLandlord())
+                .localDateTime(LocalDateTime.now(ZoneId.of("Asia/Seoul")))
                 .parseResultDto(parseResultDto)
                 .buildingLedgerResult(null)
                 .marketPrice(null)
