@@ -39,6 +39,9 @@ prompts:
         - address: {{address}}            # 사용자가 입력한 주소(문자열)
         - leaseDeposit: {{leaseDeposit}}  # 전세 보증금(원, 정수)
         - landlord: {{landlord}}          # 임대인 이름(선택, 없으면 빈 문자열)
+    
+        [건축물대장 분석 결과]
+        - result: {{buildingLedgerResult}}
 
         [등기부 파싱 결과 ParseResultDto] 
         - address: {{parseResultDto.address}}
@@ -118,6 +121,9 @@ prompts:
         - address: {{address}}            # 사용자가 입력한 주소(문자열)
         - leaseDeposit: {{leaseDeposit}}  # 전세 보증금(원, 정수)
         - landlord: {{landlord}}          # 임대인 이름(선택, 없으면 빈 문자열)
+    
+        [건축물대장 분석 결과]
+        - result: {{buildingLedgerResult}}
 
         [전제]
         - hasRegistry: false                      # 등기부 파싱 결과 없음

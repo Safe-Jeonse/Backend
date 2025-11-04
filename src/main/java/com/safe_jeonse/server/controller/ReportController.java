@@ -38,7 +38,6 @@ public class ReportController {
 
         Optional.ofNullable(validationResult.getLnbrMnnm()).ifPresent(addressContext::setLnbrMnnm);
         Optional.ofNullable(validationResult.getLnbrSlno()).ifPresent(addressContext::setLnbrSlno);
-
         String result = reportService.generateReport(request);
         return ResponseEntity.ok(result);
     }

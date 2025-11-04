@@ -50,8 +50,8 @@ public class DeepCheckService {
 
         String systemPrompt = promptManger.getSystemPrompt(dtoWithLedger);
         String userPrompt = promptManger.getDeepCheckPrompt(dtoWithLedger);
-//        log.info("생성된 시스템 프롬프트: {}", systemPrompt);
-//        log.info("생성된 사용자 프롬프트: {}", userPrompt);
+        log.info("생성된 시스템 프롬프트: {}", systemPrompt);
+        log.info("생성된 사용자 프롬프트: {}", userPrompt);
 //        try {
 //            Prompt prompt = new Prompt(List.of(
 //                    new SystemMessage(systemPrompt),

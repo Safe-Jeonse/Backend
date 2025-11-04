@@ -41,7 +41,8 @@ public class BuildingLedgerExposService {
 
         String dongNumeric = toNumericOrNull(dong);
         if (!equalsNullable(dong, dongNumeric)) {
-            resp = requestExpos(bun, ji, sigunguCd, bjdongCd, dongNumeric, ho);
+            String hoCandidate = !equalsNullable(ho, hoNoSuffix) ? hoNoSuffix : ho;
+            resp = requestExpos(bun, ji, sigunguCd, bjdongCd, dongNumeric, hoCandidate);
             if (!isEmpty(resp)) return resp;
         }
 
