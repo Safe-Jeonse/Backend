@@ -6,6 +6,26 @@ spring:
       enabled: true
       max-file-size: 100MB
       max-request-size: 100MB
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+    url: ${SPRING_DATASOURCE_URL}           
+    username: ${SPRING_DATASOURCE_USERNAME} 
+    password: ${SPRING_DATASOURCE_PASSWORD} 
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:false} 
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MariaDBDialect
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB
+      max-request-size: 100MB    
   ai:
     openai:
       api-key: ${OPENAI_API_KEY}
@@ -25,6 +45,7 @@ spring:
       BL-expos-url: ${BL_EXPOSE_URL}
       BL-title-url: ${BL_TITLE_URL}
       open-data-key: ${OPEN_DATA_KEY}
+      
 
 
   docker:
@@ -84,7 +105,7 @@ prompts:
         5) detailedRiskAnalysis는 최소 4개 이상(등기부 없으면 3개 이상) 생성. 각 항목은 구체 근거 수치/날짜 포함.
         6) overallRiskLevel은 규칙(전세가율+강화 규칙)에 따라 산정.
         7) aiGeneralComment는 2~4문장 한국어.
-        8) humanChecklist는 5~8개. isEssential=true 위주.
+        8) humanChecklist는 8~10개. isEssential=true 위주.
         9) 출력은 아래 JSON 스키마(키 순서 유지) 그대로. 오직 JSON만.
         10) 소유권 이전에 관한 데이터는 [오늘의 날짜]를 참고해서 비교해야함
         그리고 코멘트에 가장 최근의 소유권 변동이 일어난지 몇년 됬는지 반드시 작성해
@@ -150,7 +171,7 @@ prompts:
         6) overallRiskLevel은 보수적으로 산정한다.
            - 전세가율 추정 구간(내부적으로 계산 가능하나 riskRatio 필드는 null 유지)과 데이터 부재 페널티를 반영해 한 단계 상향 가능.
         7) aiGeneralComment는 2~4문장 한국어로 핵심 리스크와 조치를 요약(등기부 미첨부로 인한 불확실성 강조).
-        8) humanChecklist는 5~8개 작성, isEssential=true 위주.
+        8) humanChecklist는 8~10개 작성, isEssential=true 위주.
            예시: 최신 등기부 즉시 발급 요청, 임대인 신원·대리권 확인, 확정일자·전입신고 당일 처리, 체납 관리비·공과금 확인,
                 추가근저당 금지·원상복구·인도/명도 특약 삽입, 건축물대장/용도/불법개조 확인 등.
         9) 출력은 아래 JSON 스키마(키 순서 유지) 그대로. 오직 JSON만 출력한다(코드블록/설명 금지).
@@ -197,7 +218,7 @@ prompts:
         }
   system: |
     출력 형식:
-    - 오직 JSON만 출력한다. 코드블록, 설명 문장, 접두/접미 텍스트 금지.
+    - 오직 JSON만 출력한다. 코드블록, 설명 문장, 접두/접미 텍스트, 메타에이터 금지.
     - 키 이름/타입/열거값은 스키마와 완전히 동일해야 한다.
     - 숫자는 한국 원(정수) 기준으로 출력하되, 전세가율(riskRatio)은 소수점 1자리까지.
     - 불확실하거나 데이터가 없으면 추정/판단 근거를 "comment"에 한국어로 명시한다.
@@ -237,9 +258,9 @@ prompts:
     7) AI 종합 코멘트(aiGeneralComment):
     - 핵심 리스크와 조치 권고를 2~4문장으로 요약.
     8) 사람이 확인해야 할 체크리스트(humanChecklist):
-    - 5~8개 내외, isEssential=true 위주로 구성.
+    - 8 ~ 10개 내외, isEssential=true 위주로 구성.
     - 예: 임대인 신원·대리권 확인, 등기부 최신본 재발급일 확인, 전입신고·확정일자 당일 처리, 선순위 채권 변동 감시, 체납 관리비·공과금 확인, 특약(추가근저당 금지/원상복구/인도·명도/중도말소 등) 삽입, 건축물대장 용도·불법개조 여부 확인 
-    임대인 체납 및 채무 여부, HUG 가입 여부등.
+    임대인 체납 및 채무 여부, HUG 가입 여부, 공인중개사(업무상태, 신원 확인 보증보험 가입) 등.
     
     검증:
     - 모든 코멘트에는 가능한 한 입력 데이터(날짜, 금액, 권리종류 등)에서 유추한 구체 근거를 포함한다.
