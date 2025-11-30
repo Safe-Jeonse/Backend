@@ -1,6 +1,5 @@
 package com.safe_jeonse.server.dto.request;
 
-
 import com.safe_jeonse.server.validation.annotation.ValidAddress;
 import com.safe_jeonse.server.validation.annotation.ValidPdf;
 import jakarta.validation.constraints.Max;
@@ -28,6 +27,12 @@ public class ReportRequest {
 
     @Pattern(regexp = KOREAN_NAME_REGEX_STRICT, message = "이름을 2 ~ 4 글자의 한글로 입력해주세요.")
     private String landlord;
+
+    @Max(value = MAX_LEASE_DEPOSIT, message = "실 거래가는 100억 이하로 입력해주세요.")
+    private Long userMarketPrice;
+
+    @NotNull(message = "아파트/다세대 여부를 확인할 수 없습니다.")
+    private String isApartment;
 
     @ValidPdf
     private MultipartFile registryFile;

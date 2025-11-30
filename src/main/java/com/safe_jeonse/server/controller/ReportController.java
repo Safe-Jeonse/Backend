@@ -4,7 +4,6 @@ import com.safe_jeonse.server.dto.request.ReportRequest;
 import com.safe_jeonse.server.service.AddressContext;
 import com.safe_jeonse.server.dto.AddressValidationResult;
 import com.safe_jeonse.server.service.AddressValidationService;
-import com.safe_jeonse.server.service.BuildingLedgerAnalysisService;
 import com.safe_jeonse.server.service.ReportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +24,6 @@ public class ReportController {
     private final ReportService reportService;
     private final AddressValidationService addressValidationService;
     private final AddressContext addressContext;
-    private final BuildingLedgerAnalysisService buildingLedgerAnalysisService;
 
     @PostMapping(value = "/api/report", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<String> generateReport(@Valid @ModelAttribute ReportRequest request) {

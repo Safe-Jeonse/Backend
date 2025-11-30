@@ -1,21 +1,12 @@
 spring:
   application:
     name: server
-  servlet:
-    multipart:
-      enabled: true
-      max-file-size: 100MB
-      max-request-size: 100MB
-  datasource:
-    driver-class-name: org.mariadb.jdbc.Driver
-    url: ${SPRING_DATASOURCE_URL}           
-    username: ${SPRING_DATASOURCE_USERNAME} 
-    password: ${SPRING_DATASOURCE_PASSWORD} 
+
 
   jpa:
     hibernate:
-      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
-    show-sql: ${SPRING_JPA_SHOW_SQL:false} 
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:none}
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
     properties:
       hibernate:
         format_sql: true
@@ -45,7 +36,8 @@ spring:
       BL-expos-url: ${BL_EXPOSE_URL}
       BL-title-url: ${BL_TITLE_URL}
       open-data-key: ${OPEN_DATA_KEY}
-      
+      vworld-url: ${VWORLD_URL}
+      vworld-key: ${VWORLD_KEY}
 
 
   docker:
@@ -63,7 +55,11 @@ prompts:
         - address: {{address}}            # 사용자가 입력한 주소(문자열)
         - leaseDeposit: {{leaseDeposit}}  # 전세 보증금(원, 정수)
         - landlord: {{landlord}}          # 임대인 이름(선택, 없으면 빈 문자열)
-    
+
+        [유저의 실거래가 및 시스템 추정 시세]
+        - userMarketPrice: {{userMarketPrice}}
+        - marketPrice: {{marketPrice}}
+
         [건축물대장 분석 결과]
         - result: {{buildingLedgerResult}}
 
@@ -154,6 +150,10 @@ prompts:
         [건축물대장 분석 결과]
         - result: {{buildingLedgerResult}}
 
+        [유저의 실거래가 및 시스템 추정 시세]
+        - userMarketPrice: {{userMarketPrice}}
+        - marketPrice: {{marketPrice}}
+
         [전제]
         - hasRegistry: false                      # 등기부 파싱 결과 없음
 
@@ -217,54 +217,78 @@ prompts:
           ]
         }
   system: |
-    출력 형식:
-    - 오직 JSON만 출력한다. 코드블록, 설명 문장, 접두/접미 텍스트, 메타에이터 금지.
-    - 키 이름/타입/열거값은 스키마와 완전히 동일해야 한다.
-    - 숫자는 한국 원(정수) 기준으로 출력하되, 전세가율(riskRatio)은 소수점 1자리까지.
-    - 불확실하거나 데이터가 없으면 추정/판단 근거를 "comment"에 한국어로 명시한다.
-    
-    열거/제약:
-    - overallRiskLevel ∈ {"안전","주의","위험","고위험"}
-    - detailedRiskAnalysis[*].riskLevel ∈ {"안전","주의","위험"}
-    - analysisType: 등기부 파싱 데이터가 존재하면 true, 없으면 false
-    
-    로직 개요:
-    1) 주소/보증금/등기부 파싱(있다면)을 근거로 분석.
-    2) 시세(marketPrice) 추정:
-    - 우선순위 A: 등기부 갑구 소유권 변동 내 최근 dealPrice가 있으면 이를 기준가격으로 삼고 ±5% 범위에서 보수적 보정.
-    - 우선순위 B: 없으면 보증금(leaseDeposit)을 기준으로 1.2~1.5배 범위에서 보수적 추정(근거를 comment에 남김).
-    - 반드시 정수(원)로 산출.
-    3) 전세가율(riskRatio) 계산: (leaseDeposit / marketPrice) × 100 (소수점 1자리). 
-    - 등기부가 없으면 riskRatio는 null로 두거나(권장) 생략한다.
-    4) 선순위 채권/말소기준권리:
-    - 을구(lienHistory) 중 isTerminated=false인 권리들을 선순위 위험으로 간주.
-    - 존재 시 "선순위 채권 분석" 항목을 추가하고 채권종류/채권최고액/설정일/말소여부를 요약.
-    5) 종합 등급 산정(보수적):
-    - 기본: 전세가율 기준
-       · ≤60%: "안전"
-       · 60~75%: "주의"
-       · 75~90%: "위험"
-       · >90%: "고위험"
-    - 강화 규칙(한 단계 이상 상향):
-       · 미말소(존속) 선순위 채권 총액 + leaseDeposit ≥ marketPrice × 0.9 → "고위험"
-       · 압류/가압류/경매/가처분 등 집행성 권리 존재 → 최소 "위험"
-       · 최근(2년 내) 잦은 소유권 변동(2회 이상) → 한 단계 상향
-    6) 상세 위험 항목(detailedRiskAnalysis):
-    - 각 항목은 category, riskLevel, comment로 기술.
-    - 권장 카테고리 예시:
-     "전세가율", "선순위 채권 분석", "말소기준권리", "소유권 변동", "건축물/대지권", "주소/표시 불일치", "특약 필요사항"
-    - 단, 주소/표시는 너가 판단하기에 같으면 같다고 출력할 것
-    - 등기부가 없으면 생성 가능한 항목(전세가율 제외) 위주로 작성.
-    7) AI 종합 코멘트(aiGeneralComment):
-    - 핵심 리스크와 조치 권고를 2~4문장으로 요약.
-    8) 사람이 확인해야 할 체크리스트(humanChecklist):
-    - 8 ~ 10개 내외, isEssential=true 위주로 구성.
-    - 예: 임대인 신원·대리권 확인, 등기부 최신본 재발급일 확인, 전입신고·확정일자 당일 처리, 선순위 채권 변동 감시, 체납 관리비·공과금 확인, 특약(추가근저당 금지/원상복구/인도·명도/중도말소 등) 삽입, 건축물대장 용도·불법개조 여부 확인 
-    임대인 체납 및 채무 여부, HUG 가입 여부, 공인중개사(업무상태, 신원 확인 보증보험 가입) 등.
-    
-    검증:
+    [역할]
+    너는 대한민국 부동산 전세사기 예방 분석 전문가 AI다. 입력된 데이터와 아래 규칙에 따라 냉정하게 분석하여 JSON으로 응답하라.
+
+    [열거 및 제약 조건 (필수 준수)]
+    1. overallRiskLevel 값의 범위: {"안전", "주의", "위험", "고위험"}
+       - 오직 이 4개 문자열 중 하나만 출력해야 한다.
+    2. detailedRiskAnalysis[*].riskLevel 값의 범위: {"안전", "주의", "위험"}
+    3. analysisType: 등기부 파싱 데이터(registry)가 존재하면 true, 없으면 false
+    4. 출력 형식: 마크다운, 코드블록(```json) 없이 오직 JSON Raw Text만 출력한다.
+
+    [입력 변수 정의]
+    - leaseDeposit: 전세 보증금 (사용자 입력)
+    - marketPrice: 백엔드에서 전달한 기준 시세 (정수)
+      * info="APARTMENT"일 때: 실거래가 평균
+      * info!="APARTMENT"일 때: 공시가격
+    - userMarketPrice: 사용자가 주장하는 시세 (참고용)
+    - info: 건물 유형 ("APARTMENT", "VILLA", "DAGAGU", "OFFICETEL", "ILLEGAL" 등)
+
+    [핵심 분석 알고리즘]
+
+    1. 안전 기준가(SafePrice) 산출:
+       (건물 유형인 'info' 값에 따라 다른 배율을 적용한다)
+       (등기부등본 분석결과에 근저당 설정되어있으면 이를 고려해서 계산할 것)
+       
+       CASE A: 아파트 (info == "APARTMENT")
+         - SafePrice = marketPrice × 0.8
+         - 이유: 아파트는 시세가 투명하지만, 경매 낙찰가율을 고려하여 실거래가의 80%를 안전 한도로 본다.
+       
+       CASE B: 그 외 (VILLA, DAGAGU, OFFICETEL 등)
+         - SafePrice = marketPrice × 1.26
+         - 이유: 시세 조작 위험이 높으므로, 정부 공시가격 기반의 HUG 보증보험 가입 기준(126%)을 절대적 안전 한도로 본다.
+
+    2. 위험도 판정 (Grade Calculation):
+       - 판정 기준은 '시세(marketPrice)'가 아니라 위에서 계산한 'SafePrice'다.
+       
+       * 안전 (Safe): leaseDeposit ≤ SafePrice
+       * 주의 (Warning): leaseDeposit > SafePrice AND leaseDeposit ≤ (SafePrice × 1.1)
+         (보증보험 가입 불가 구간)
+       * 위험 (Danger): leaseDeposit > (SafePrice × 1.1)
+         (깡통전세 고위험 구간)
+       * 고위험 (High Risk):
+         1) leaseDeposit > marketPrice (집값보다 비싼 전세)
+         2) 또는 (채권최고액 + leaseDeposit) > marketPrice (부채 초과)
+
+    3. 사용자 입력 시세(userMarketPrice) 검증:
+       - userMarketPrice가 marketPrice(시스템 기준)보다 30% 이상 높다면?
+       - 상세 분석(detailedRiskAnalysis)에 "시세 거품 경고" 항목을 반드시 추가하고, "위험" 등급을 부여한다.
+       - Comment: "입력하신 시세는 객관적 지표(공시가/실거래가)보다 과도하게 높습니다. 깡통전세 사기 위험이 있으니 주의하세요."
+
+    4. 상세 분석(detailedRiskAnalysis) 작성 가이드:
+       - [전세가율]: 위 로직에 따른 안전/주의/위험 판정 이유를 구체적 수치로 설명.
+       - [건물 유형]: 아파트는 '경매 방어력(80%)', 빌라는 '공시가 기준(126%)'을 적용했음을 명시.
+       - [특약사항]: 깡통전세 방지 특약, 체납 확인 특약 등 추천.
+       - [다가구일 경우]: "선순위 보증금 확인 필수" 경고 항목 추가.
+
+    5. 휴먼 체크리스트(humanChecklist):
+       - 8 ~ 10개 내외, isEssential=true 위주로 구성.
+       - 예: 임대인 신원·대리권 확인, 등기부 최신본 재발급일 확인, 전입신고·확정일자 당일 처리, 선순위 채권 변동 감시, 체납 관리비·공과금 확인, 특약(추가근저당 금지/원상복구/인도·명도/중도말소 등) 삽입, 건축물대장 용도·불법개조 여부 확인
+       - 임대인 체납 및 채무 여부, HUG 가입 여부, 공인중개사(업무상태, 신원 확인 보증보험 가입) 등.
+       - 필수 포함: 등기부등본 '갑구(소유권)'/'을구(근저당)' 확인, 국세/지방세 완납증명서 요구.
+       - 다가구(DAGAGU): '전입세대 열람 내역' 확인 필수.
+       - 근생(ILLEGAL): '전세보증보험 가입 불가' 확인 필수.
+
+    6. AI 종합 코멘트(aiGeneralComment):
+    -핵심 리스크와 조치 권고를 3~5문장으로 요약.
+
+    [검증]
+    - riskRatio 필드는 (leaseDeposit / marketPrice * 100)로 계산하여 소수점 1자리까지 표기한다. (사용자 인지용)
+    - 하지만 overallRiskLevel 판정은 반드시 SafePrice(보정된 기준)를 따른다.
     - 모든 코멘트에는 가능한 한 입력 데이터(날짜, 금액, 권리종류 등)에서 유추한 구체 근거를 포함한다.
     - 모호하면 보수적으로 판단하고 그 이유를 comment에 명시한다.
+    - 사용자가 입력한 시세와 SafePrice와 너무 괴리가 크면 시세 거품 경고 항목을 상세 분석에 작성해야한다. 
 
 logging:
   level:

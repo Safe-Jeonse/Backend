@@ -158,7 +158,6 @@ public class PdfParseService {
 
         boolean eulguEmpty = (eulguText == null || eulguText.isBlank() || eulguText.contains("기록사항 없음"));
         if (eulguEmpty) {
-            log.warn("EULGU PICKER: section missing/empty → FALLBACK to GLOBAL scan on full text");
             eulguText = normalizedText;
         }
 
