@@ -51,7 +51,7 @@ public class QuickCheckService {
         }
 
         MarketPrice marketPrice = marketPriceService.getMarketPrice(addressInfo, promptDto.getIsApartment(),
-                promptDto.getUserMarketPrice(), analysisResult.hhldCnt(), analysisResult.fmlyCnt());
+            analysisResult.hhldCnt(), analysisResult.fmlyCnt());
 
         PromptDto dtoWithLedger = PromptDto.builder()
                 .address(promptDto.getAddress())

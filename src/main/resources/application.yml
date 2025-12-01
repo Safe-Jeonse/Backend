@@ -3,6 +3,7 @@ spring:
     name: server
 
 
+
   jpa:
     hibernate:
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:none}
@@ -38,7 +39,7 @@ spring:
       open-data-key: ${OPEN_DATA_KEY}
       vworld-url: ${VWORLD_URL}
       vworld-key: ${VWORLD_KEY}
-
+      vworld-villa-url: ${VWORLD_VILLA_URL}
 
   docker:
     compose:
@@ -285,6 +286,7 @@ prompts:
 
     [검증]
     - riskRatio 필드는 (leaseDeposit / marketPrice * 100)로 계산하여 소수점 1자리까지 표기한다. (사용자 인지용)
+    - 만일 userMarketPrice와 marketPrice와 괴리가 크지 않다면 (leaseDeposit / userMarketPrice * 100)로 계산한다.
     - 하지만 overallRiskLevel 판정은 반드시 SafePrice(보정된 기준)를 따른다.
     - 모든 코멘트에는 가능한 한 입력 데이터(날짜, 금액, 권리종류 등)에서 유추한 구체 근거를 포함한다.
     - 모호하면 보수적으로 판단하고 그 이유를 comment에 명시한다.

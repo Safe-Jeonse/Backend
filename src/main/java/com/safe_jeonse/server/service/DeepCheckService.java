@@ -51,7 +51,7 @@ public class DeepCheckService {
         }
 
         MarketPrice marketPrice = marketPriceService.getMarketPrice(addressInfo, promptDto.getIsApartment(),
-                promptDto.getUserMarketPrice(), analysisResult.hhldCnt(), analysisResult.fmlyCnt());
+                analysisResult.hhldCnt(), analysisResult.fmlyCnt());
 
         // PromptDto에 빌딩대장 결과를 주입한 새 DTO를 생성
         PromptDto dtoWithLedger = PromptDto.builder()

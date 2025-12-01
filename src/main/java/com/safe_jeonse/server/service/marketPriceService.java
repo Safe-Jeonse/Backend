@@ -3,7 +3,6 @@ package com.safe_jeonse.server.service;
 import com.safe_jeonse.server.dto.response.MarketPrice;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import com.safe_jeonse.server.dto.BuildingAddressInfo;
 import org.springframework.stereotype.Service;
 
@@ -16,15 +15,16 @@ import org.springframework.stereotype.Service;
 public class marketPriceService {
 
     private final DagaguAnalysisService dagaguAnalysisService;
+    private final VillaAnalysisService villaAnalysisService;
 
-    public MarketPrice getMarketPrice(BuildingAddressInfo addressInfo, String isApartment, Long userMarketPrice, int hhldCnt,
+    public MarketPrice getMarketPrice(BuildingAddressInfo addressInfo, String isApartment, int hhldCnt,
                                       int fmlyCnt) {
 
         MarketPrice marketPrice = null;
         // 아파트, 다세대 주택
         if (isApartment.equals("Y")) {
             if (containsVillaKeyword(addressInfo.address())) {
-
+                marketPrice = villaAnalysisService.getPublicPrice(addressInfo);
             } else {
 
             }
