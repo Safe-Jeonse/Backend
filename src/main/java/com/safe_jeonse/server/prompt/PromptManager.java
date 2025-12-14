@@ -11,7 +11,7 @@ import java.io.StringReader;
 import java.io.StringWriter;
 
 @Component
-public class PromptManger {
+public class PromptManager {
     @Value("${prompts.deep-prompt}")
     private String deepPromptTemplate;
 

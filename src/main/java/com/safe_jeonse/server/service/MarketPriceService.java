@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 /*
  * 부동산 실 거래가 조회 비지니스 로직
  */
-public class marketPriceService {
+public class MarketPriceService {
 
     private final DagaguAnalysisService dagaguAnalysisService;
     private final VillaAnalysisService villaAnalysisService;

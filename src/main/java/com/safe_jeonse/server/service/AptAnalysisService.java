@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.safe_jeonse.server.dto.response.AiApartmentPriceResponse;
 import com.safe_jeonse.server.dto.response.MarketPrice;
 import com.safe_jeonse.server.exception.AiApiException;
-import com.safe_jeonse.server.prompt.PromptManger;
+import com.safe_jeonse.server.prompt.PromptManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -25,13 +25,13 @@ import java.util.List;
 public class AptAnalysisService {
 
     private final ChatModel chatModel;
-    private final PromptManger promptManger;
+    private final PromptManager promptManger;
     private final TavilySearchService tavilySearchService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AptAnalysisService(
             @Qualifier("groqChatModel") ChatModel chatModel,
-            PromptManger promptManger,
+            PromptManager promptManger,
             TavilySearchService tavilySearchService) {
         this.chatModel = chatModel;
         this.promptManger = promptManger;
@@ -50,7 +50,7 @@ public class AptAnalysisService {
 
         // 아파트명이나 전용면적이 없으면 조회 불가
         if (apartmentName == null || apartmentName.isEmpty() ||
-            exclusiveArea == null || exclusiveArea.isEmpty()) {
+                exclusiveArea == null || exclusiveArea.isEmpty()) {
             log.warn("아파트명 또는 전용면적 정보 없음 - AI 조회 불가");
             return MarketPrice.builder()
                     .marketPrice(0L)
@@ -64,8 +64,8 @@ public class AptAnalysisService {
         String searchResult = tavilySearchService.search(searchQuery);
         log.info("검색중:{}", searchQuery);
         if (searchResult == null || searchResult.isEmpty()) {
-             log.warn("Tavily 검색 결과 없음");
-             searchResult = "검색 결과 없음";
+            log.warn("Tavily 검색 결과 없음");
+            searchResult = "검색 결과 없음";
         }
 
         // 2. AI에게 검색 결과 분석 및 JSON 변환 요청
@@ -94,6 +94,7 @@ public class AptAnalysisService {
                     new UserMessage(userPrompt)));
 
             ChatResponse response = chatModel.call(prompt);
+            log.info("result:{}", response);
             // Spring AI의 응답에서 텍스트 추출
             String aiResponse = response.getResult().getOutput().getText();
 

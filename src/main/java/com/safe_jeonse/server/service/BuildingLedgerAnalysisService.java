@@ -107,6 +107,12 @@ public class BuildingLedgerAnalysisService {
         String lnbrSlno = addressContext.getLnbrSlno().orElse(null);
 
         JusoApiResponse response = jusoApiClient.getJusoCode(address);
+
+        if (response == null || response.result() == null || response.result().resultdata() == null || response.result().resultdata().isEmpty()) {
+            log.error("주소 검색 결과가 없습니다. address: {}", address);
+            throw new IllegalArgumentException("주소 검색 결과가 없습니다. 올바른 주소인지 확인해주세요.");
+        }
+
         String legCd = response.result().resultdata().get(0).getLegCd();
 
         String sigunguCd = legCd.substring(0, 5);

@@ -5,7 +5,7 @@ import com.safe_jeonse.server.dto.BuildingLedgerAnalysisResult;
 import com.safe_jeonse.server.dto.PromptDto;
 import com.safe_jeonse.server.dto.response.MarketPrice;
 import com.safe_jeonse.server.exception.AiApiException;
-import com.safe_jeonse.server.prompt.PromptManger;
+import com.safe_jeonse.server.prompt.PromptManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -24,17 +24,17 @@ import java.util.concurrent.TimeUnit;
 public class DeepCheckService {
 
     private final ChatModel chatModel;
-    private final PromptManger promptManger;
+    private final PromptManager promptManager;
     private final BuildingLedgerAnalysisService buildingLedgerAnalysisService;
-    private final marketPriceService marketPriceService;
+    private final MarketPriceService marketPriceService;
 
     public DeepCheckService(
             @Qualifier("groqChatModel") ChatModel chatModel,
-            PromptManger promptManger,
+            PromptManager promptManager,
             BuildingLedgerAnalysisService buildingLedgerAnalysisService,
-            marketPriceService marketPriceService) {
+            MarketPriceService marketPriceService) {
         this.chatModel = chatModel;
-        this.promptManger = promptManger;
+        this.promptManager = promptManager;
         this.buildingLedgerAnalysisService = buildingLedgerAnalysisService;
         this.marketPriceService = marketPriceService;
     }
@@ -85,8 +85,8 @@ public class DeepCheckService {
                 .userMarketPrice(promptDto.getUserMarketPrice())
                 .build();
 
-        String systemPrompt = promptManger.getSystemPrompt(dtoWithLedger);
-        String userPrompt = promptManger.getDeepCheckPrompt(dtoWithLedger);
+        String systemPrompt = promptManager.getSystemPrompt(dtoWithLedger);
+        String userPrompt = promptManager.getDeepCheckPrompt(dtoWithLedger);
         try {
             Prompt prompt = new Prompt(List.of(
                     new SystemMessage(systemPrompt),
@@ -94,7 +94,19 @@ public class DeepCheckService {
 
             ChatResponse response = chatModel.call(prompt);
 
-            return response.getResult().getOutput().toString();
+            String content = response.getResult().getOutput().getText();
+
+            // JSON 부분만 정교하게 추출 (마크다운 및 사족 제거)
+            int jsonStartIndex = content.indexOf("{");
+            int jsonEndIndex = content.lastIndexOf("}");
+
+            if (jsonStartIndex != -1 && jsonEndIndex != -1 && jsonStartIndex <= jsonEndIndex) {
+                return content.substring(jsonStartIndex, jsonEndIndex + 1);
+            } else {
+                // JSON 구조를 찾지 못한 경우 원본 반환 혹은 예외 처리
+                log.warn("AI 응답에서 JSON을 찾을 수 없습니다. 원본 응답: {}", content);
+                return content;
+            }
         } catch (Exception e) {
             log.error("AI API 호출 중 오류 발생", e);
             throw new AiApiException("AI 분석 중 오류가 발생했습니다.", e);

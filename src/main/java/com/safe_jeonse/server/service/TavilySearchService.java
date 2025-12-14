@@ -37,14 +37,6 @@ public class TavilySearchService {
             requestBody.put("include_answer", true);
             requestBody.put("max_results", 5);
 
-            // 네이버 부동산, 호갱노노, 아실, KB부동산 등 부동산 플랫폼 위주로 검색
-            requestBody.put("include_domains", List.of(
-                    "land.naver.com",
-                    "hogangnono.com",
-                    "asil.kr",
-                    "kbland.kr"
-            ));
-
             String response = restClient.post()
                     .uri("/search")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -53,7 +45,24 @@ public class TavilySearchService {
                     .body(String.class);
 
             JsonNode root = objectMapper.readTree(response);
-            return root.path("answer").asText();
+            String answer = root.path("answer").asText();
+
+            // 출처(URL) 정보 수집
+            StringBuilder sources = new StringBuilder();
+            JsonNode results = root.path("results");
+            if (results.isArray()) {
+                for (JsonNode result : results) {
+                    String title = result.path("title").asText();
+                    String url = result.path("url").asText();
+                    sources.append(String.format("- %s (%s)\n", title, url));
+                }
+            }
+
+            if (sources.length() > 0) {
+                return answer + "\n\n[참고 출처]\n" + sources.toString();
+            }
+
+            return answer;
 
         } catch (Exception e) {
             log.error("Tavily Search API 호출 실패", e);

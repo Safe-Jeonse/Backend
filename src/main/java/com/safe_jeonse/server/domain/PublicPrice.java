@@ -15,7 +15,7 @@ import lombok.ToString;
                 @Index(name = "idx_search", columnList = "bjdongCode, bonbun, bubun, hoName")
         }
 )
-public class publicPrice {
+public class PublicPrice {
 
     @Id
     @Column(name = "unique_no", length = 30)
