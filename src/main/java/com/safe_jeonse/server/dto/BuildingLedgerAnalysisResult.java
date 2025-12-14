@@ -6,5 +6,8 @@ import lombok.Builder;
 public record BuildingLedgerAnalysisResult(
         String analysisMessage,
         int hhldCnt,
-        int fmlyCnt) {
+        int fmlyCnt,
+        String apartmentName,
+        String exclusiveArea,
+        String isApartment) {
 }

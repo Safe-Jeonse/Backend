@@ -1,6 +1,7 @@
 package com.safe_jeonse.server.controller;
 
 import com.safe_jeonse.server.dto.request.ReportRequest;
+import com.safe_jeonse.server.dto.response.ReportResponseDto;
 import com.safe_jeonse.server.service.AddressContext;
 import com.safe_jeonse.server.dto.AddressValidationResult;
 import com.safe_jeonse.server.service.AddressValidationService;
@@ -26,7 +27,7 @@ public class ReportController {
     private final AddressContext addressContext;
 
     @PostMapping(value = "/api/report", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<String> generateReport(@Valid @ModelAttribute ReportRequest request) {
+    public ResponseEntity<ReportResponseDto> generateReport(@Valid @ModelAttribute ReportRequest request) {
 
         if(!addressValidationService.validateAddress(request.getAddress())) {
             throw new IllegalArgumentException("잘못된 도로명 주소입니다.");
@@ -36,7 +37,7 @@ public class ReportController {
 
         Optional.ofNullable(validationResult.getLnbrMnnm()).ifPresent(addressContext::setLnbrMnnm);
         Optional.ofNullable(validationResult.getLnbrSlno()).ifPresent(addressContext::setLnbrSlno);
-        String result = reportService.generateReport(request);
+        ReportResponseDto result = reportService.generateReport(request);
         return ResponseEntity.ok(result);
     }
 }

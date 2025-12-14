@@ -13,6 +13,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -21,13 +22,23 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class QuickCheckService {
 
     private final ChatModel chatModel;
     private final PromptManger promptManger;
     private final BuildingLedgerAnalysisService buildingLedgerAnalysisService;
     private final marketPriceService marketPriceService;
+
+    public QuickCheckService(
+            @Qualifier("groqChatModel") ChatModel chatModel,
+            PromptManger promptManger,
+            BuildingLedgerAnalysisService buildingLedgerAnalysisService,
+            marketPriceService marketPriceService) {
+        this.chatModel = chatModel;
+        this.promptManger = promptManger;
+        this.buildingLedgerAnalysisService = buildingLedgerAnalysisService;
+        this.marketPriceService = marketPriceService;
+    }
 
     public String quickCheck(PromptDto promptDto) {
 
@@ -46,12 +57,21 @@ public class QuickCheckService {
                     .analysisMessage("건축물 대장 분석 결과를 불러오는 데 실패했습니다.")
                     .hhldCnt(0)
                     .fmlyCnt(0)
+                    .apartmentName("")
+                    .exclusiveArea(null)
+                    .isApartment(promptDto.getIsApartment())
                     .build();
             future.cancel(true);
         }
 
-        MarketPrice marketPrice = marketPriceService.getMarketPrice(addressInfo, promptDto.getIsApartment(),
-            analysisResult.hhldCnt(), analysisResult.fmlyCnt());
+        MarketPrice marketPrice = marketPriceService.getMarketPrice(
+                addressInfo,
+                analysisResult.isApartment(),
+                analysisResult.hhldCnt(),
+                analysisResult.fmlyCnt(),
+                analysisResult.apartmentName(),
+                analysisResult.exclusiveArea(),
+                promptDto.getUserMarketPrice());
 
         PromptDto dtoWithLedger = PromptDto.builder()
                 .address(promptDto.getAddress())
@@ -67,8 +87,6 @@ public class QuickCheckService {
 
         String systemPrompt = promptManger.getSystemPrompt(dtoWithLedger);
         String userPrompt = promptManger.getQuickCheckPrompt(dtoWithLedger);
-        log.debug("생성된 시스템 프롬프트: {}", systemPrompt);
-        log.debug("생성된 사용자 프롬프트: {}", userPrompt);
 
         try {
             Prompt prompt = new Prompt(List.of(

@@ -144,19 +144,50 @@ public class BuildingLedgerAnalysisService {
                 bjdongCd);
         List<BuildingLedgerTitleResponse.Item> matchedTitles = filterTitleByDong(titleResult, dong);
 
+        // matchedTitles가 비어있을 경우 처리
+        if (matchedTitles.isEmpty()) {
+            log.warn("해당 동({})에 대한 표제부 정보를 찾을 수 없습니다. 주소: {}", dong, info.address());
+            // 기본값 또는 에러 처리 로직 필요. 여기서는 빈 결과 반환 예시
+            return BuildingLedgerAnalysisResult.builder()
+                    .analysisMessage("건축물대장 표제부 정보를 찾을 수 없습니다.")
+                    .hhldCnt(0)
+                    .fmlyCnt(0)
+                    .apartmentName("")
+                    .exclusiveArea(null)
+                    .isApartment("N")
+                    .build();
+        }
+
         BuildingLedgerTitleResponse.Item titleItem = matchedTitles.get(0);
         int hhldCnt = parseCount(titleItem.getHhldCnt());
         int fmlyCnt = parseCount(titleItem.getFmlyCnt());
+
+        // 아파트명 추출 (건축물대장 표제부에서)
+        String apartmentName = titleItem.getBldNm() != null ? titleItem.getBldNm().trim() : "";
+        String exclusiveArea = null;
+        String isApartment = "N";
 
         builderLedgerResult.append(checkMainPurps(titleItem));
         Boolean isBuilding = checkBuildingType(titleItem);
 
         // 집합 건축물(아파트, 빌라)
         if (isBuilding) {
+            isApartment = "Y";
             BuildingLedgerExposResponse exposResponse = buildingLedgerExposService.getBLExpos(lnbrMnnm, lnbrSlno,
                     sigunguCd, bjdongCd, dong, ho);
             List<BuildingLedgerExposResponse.Item> matchedExpos = filterUnitsByDongHo(exposResponse, dong, ho);
-            builderLedgerResult.append(checkExposPurps(matchedExpos.get(0)));
+
+            if (matchedExpos.isEmpty()) {
+                 log.warn("해당 동/호({}/{})에 대한 전유부 정보를 찾을 수 없습니다. 주소: {}", dong, ho, info.address());
+                 builderLedgerResult.append("전유부 정보를 찾을 수 없습니다.");
+            } else {
+                builderLedgerResult.append(checkExposPurps(matchedExpos.get(0)));
+
+                // 전용면적 추출 (전유부에서)
+                if (matchedExpos.get(0) != null) {
+                    exclusiveArea = matchedExpos.get(0).getArea();
+                }
+            }
         }
         // 일반(다가구), 전유부 필요 x
         else {
@@ -168,6 +199,9 @@ public class BuildingLedgerAnalysisService {
                 .analysisMessage(builderLedgerResult.toString())
                 .hhldCnt(hhldCnt)
                 .fmlyCnt(fmlyCnt)
+                .apartmentName(apartmentName)
+                .exclusiveArea(exclusiveArea)
+                .isApartment(isApartment)
                 .build();
     }
 

@@ -16,17 +16,39 @@ public class marketPriceService {
 
     private final DagaguAnalysisService dagaguAnalysisService;
     private final VillaAnalysisService villaAnalysisService;
+    private final AptAnalysisService aptAnalysisService;
 
     public MarketPrice getMarketPrice(BuildingAddressInfo addressInfo, String isApartment, int hhldCnt,
-                                      int fmlyCnt) {
+                                      int fmlyCnt, String apartmentName, String exclusiveArea, Long userMarketPrice) {
+
+        String infoType;
+        // 건물 유형 판별
+        if (isApartment.equals("Y")) {
+            if (containsVillaKeyword(addressInfo.address())) { // 다세대 주택인 경우
+                infoType = "VILLA";
+            } else {
+                infoType = "APARTMENT";
+            }
+        } else {
+            infoType = "DAGAGU";
+        }
+
+        if (userMarketPrice != null && userMarketPrice > 0) {
+            return MarketPrice.builder()
+                    .marketPrice(userMarketPrice)
+                    .info(infoType)
+                    .build();
+        }
 
         MarketPrice marketPrice = null;
         // 아파트, 다세대 주택
         if (isApartment.equals("Y")) {
-            if (containsVillaKeyword(addressInfo.address())) {
+            if (containsVillaKeyword(addressInfo.address())) { // 다세대 주택인 경우
+
                 marketPrice = villaAnalysisService.getPublicPrice(addressInfo);
             } else {
-
+                // 아파트: AI로 가격 조회 (apartmentName, exclusiveArea 전달)
+                marketPrice = aptAnalysisService.getAptPrice(addressInfo.address(), apartmentName, exclusiveArea);
             }
         }
         // 다가구 주택

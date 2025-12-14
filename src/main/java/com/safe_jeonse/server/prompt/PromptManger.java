@@ -21,6 +21,12 @@ public class PromptManger {
     @Value("${prompts.system}")
     private String systemPromptTemplate;
 
+    @Value("${prompts.apt-prompt}")
+    private String aptPromptTemplate;
+
+    @Value("${prompts.apt-system-prompt}")
+    private String aptSystemPromptTemplate;
+
     private final MustacheFactory mustacheFactory = new DefaultMustacheFactory();
 
     public String getDeepCheckPrompt(PromptDto promptDto) {
@@ -41,4 +47,17 @@ public class PromptManger {
         mustache.execute(writer, context);
         return writer.toString();
     }
+
+    public String getAptPricePrompt(String address, String apartmentName, String exclusiveArea) {
+        var context = new java.util.HashMap<String, String>();
+        context.put("address", address);
+        context.put("apartmentName", apartmentName != null ? apartmentName : "정보 없음");
+        context.put("exclusiveArea", exclusiveArea != null ? exclusiveArea : "정보 없음");
+        return renderTemplate(aptPromptTemplate, context);
+    }
+
+    public String getAptPriceSystemPrompt() {
+        return aptSystemPromptTemplate;
+    }
 }
+

@@ -26,7 +26,7 @@ public class GroqAiConfig {
     @Value("${spring.ai.openai.chat.options.max-tokens}")
     private Integer maxTokens;
 
-    @Bean
+    @Bean("groqChatModel")
     public ChatModel chatModel() {
 
         OpenAiApi openAiApi = new OpenAiApi(baseUrl, apiKey);
