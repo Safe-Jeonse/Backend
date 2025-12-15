@@ -1,11 +1,8 @@
-version: '3.8'
-
 services:
   mariadb:
     image: mariadb:10.11
     container_name: jeonse-db
     restart: always
-
     env_file:
       - .env
     environment:
@@ -21,5 +18,22 @@ services:
     ports:
       - "3306:3306"
     volumes:
+      # DB 데이터 영구 저장소
       - ./db_data:/var/lib/mysql
-      - ./csv_data:/var/lib/mysql-files
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  backend:
+    container_name: jeonse-backend
+    build: .  # 현재 경로의 Dockerfile로 빌드
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Seoul
+      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/${MYSQL_DATABASE}?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false
+      # .env의 변수를 스프링부트 변수로 매핑
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+    depends_on:
+      - mariadb # DB가 먼저 실행된 후 백엔드 실행

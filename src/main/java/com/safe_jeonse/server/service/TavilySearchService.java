@@ -35,7 +35,7 @@ public class TavilySearchService {
             requestBody.put("query", query);
             requestBody.put("search_depth", "advanced");
             requestBody.put("include_answer", true);
-            requestBody.put("max_results", 5);
+            requestBody.put("max_results", 10);
 
             String response = restClient.post()
                     .uri("/search")
@@ -59,6 +59,7 @@ public class TavilySearchService {
             }
 
             if (sources.length() > 0) {
+                //log.info("Tavily 검색 출처:\n{}", sources);
                 return answer + "\n\n[참고 출처]\n" + sources.toString();
             }
 

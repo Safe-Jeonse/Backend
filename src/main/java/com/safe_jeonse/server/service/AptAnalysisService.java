@@ -58,23 +58,54 @@ public class AptAnalysisService {
                     .build();
         }
 
-        // 1. Tavily 검색 수행
-        // 쿼리 강화: "매매" 강조, "상한가 하한가" 추가로 시세표 유도
-        String searchQuery = String.format("%s %s 전용면적 %s 매매 시세 실거래가 (전세 제외)", address, apartmentName, exclusiveArea);
-        String searchResult = tavilySearchService.search(searchQuery);
-        log.info("검색중:{}", searchQuery);
+        // 1. Tavily 검색 수행 (재시도 로직 포함)
+        String searchResult = performSearch(address, apartmentName, exclusiveArea);
+
         if (searchResult == null || searchResult.isEmpty()) {
             log.warn("Tavily 검색 결과 없음");
-            searchResult = "검색 결과 없음";
+            return MarketPrice.builder().marketPrice(0L).info("검색 결과 없음").build();
         }
 
-        // 2. AI에게 검색 결과 분석 및 JSON 변환 요청
-        String systemPrompt = promptManger.getAptPriceSystemPrompt();
+        // 2. AI 분석 수행 (1회만 호출)
+        return analyzeWithAi(searchResult, address, apartmentName, exclusiveArea);
+    }
 
-        // 기존 프롬프트
+    private String performSearch(String address, String apartmentName, String exclusiveArea) {
+        String addressWithDong = address.replaceAll("\\d+호", "").trim();
+
+        // 전용면적 정수화 (예: 84.99 -> 84) - 검색 정확도 향상
+        String roundedArea = exclusiveArea;
+        try {
+            double area = Double.parseDouble(exclusiveArea);
+            roundedArea = String.valueOf((int) area);
+        } catch (Exception e) {
+            // 변환 실패 시 원래 값 사용
+        }
+
+        String query1 = String.format("%s %s %s㎡ 매매", addressWithDong, apartmentName, roundedArea);
+
+        log.info("1차 검색 시도: {}", query1);
+        String result1 = tavilySearchService.search(query1);
+
+        // 결과가 충분하면 반환
+        if (result1 != null && result1.length() > 100) {
+            //log.info("1차 검색 성공 (길이: {})", result1.length());
+            return result1;
+        }
+
+        // 2차 시도: 동 정보 제외 검색 (데이터 확보 우선)
+        log.info("1차 검색 결과 부족, 2차 검색 시도 (동 정보 제외)");
+        String addressWithoutDong = address.replaceAll("\\d+동", "").replaceAll("\\d+호", "").trim();
+        String query2 = String.format("%s %s %s㎡ 매매", addressWithoutDong, apartmentName, roundedArea);
+
+        return tavilySearchService.search(query2);
+    }
+
+    private MarketPrice analyzeWithAi(String searchResult, String address, String apartmentName, String exclusiveArea) {
+        // AI에게 검색 결과 분석 요청
+        String systemPrompt = promptManger.getAptPriceSystemPrompt();
         String instructionPrompt = promptManger.getAptPricePrompt(address, apartmentName, exclusiveArea);
 
-        // 최종 프롬프트
         String userPrompt = String.format("""
                 %s
                 
@@ -86,7 +117,7 @@ public class AptAnalysisService {
                 %s
                 """, instructionPrompt, searchResult);
 
-        log.info("AI 아파트 가격 조회 시작: {} - {}, {}㎡", address, apartmentName, exclusiveArea);
+        //log.info("AI 아파트 가격 조회 시작: {} - {}, {}㎡", address, apartmentName, exclusiveArea);
 
         try {
             Prompt prompt = new Prompt(List.of(
@@ -94,39 +125,30 @@ public class AptAnalysisService {
                     new UserMessage(userPrompt)));
 
             ChatResponse response = chatModel.call(prompt);
-            log.info("result:{}", response);
-            // Spring AI의 응답에서 텍스트 추출
-            String aiResponse = response.getResult().getOutput().getText();
 
-            // JSON 파싱 시도
+            String aiResponse = response.getResult().getOutput().getText();
             AiApartmentPriceResponse priceData = parseAiResponse(aiResponse);
 
-            // 데이터 검증
             if (priceData.hasNoData()) {
                 log.warn("AI가 거래 데이터 없음을 보고함");
-                return MarketPrice.builder()
-                        .marketPrice(0L)
-                        .info("APARTMENT - AI: 거래 데이터 없음")
-                        .build();
+                return MarketPrice.builder().marketPrice(0L).info("데이터 없음").build();
             }
 
-            // 신뢰도 검증
             if (!priceData.isReliable()) {
                 log.warn("AI 응답 신뢰도 낮음: {}", priceData.confidence());
-                return MarketPrice.builder()
-                        .marketPrice(priceData.averagePrice())
-                        .info(String.format("APARTMENT - AI: 신뢰도 낮음 (%s, %d건)",
-                                priceData.confidence(), priceData.transactionCount()))
-                        .build();
+                if (priceData.averagePrice() > 0) {
+                     String info = String.format("APARTMENT - AI(신뢰도낮음): %s %s㎡ (평균 %d건, 출처: %s)",
+                            apartmentName, exclusiveArea, priceData.transactionCount(), priceData.dataSource());
+                     return MarketPrice.builder()
+                            .marketPrice(priceData.averagePrice())
+                            .info(info)
+                            .build();
+                }
+                return MarketPrice.builder().marketPrice(0L).info("신뢰도 낮음").build();
             }
 
-            // 정상 응답
             String info = String.format("APARTMENT - AI: %s %s㎡ (평균 %d건, 신뢰도: %s, 출처: %s)",
-                    apartmentName,
-                    exclusiveArea,
-                    priceData.transactionCount(),
-                    priceData.confidence(),
-                    priceData.dataSource());
+                    apartmentName, exclusiveArea, priceData.transactionCount(), priceData.confidence(), priceData.dataSource());
 
             log.info("AI 아파트 가격 조회 완료: {}원 - {}", priceData.averagePrice(), info);
 
@@ -136,8 +158,8 @@ public class AptAnalysisService {
                     .build();
 
         } catch (Exception e) {
-            log.error("AI 아파트 가격 조회 중 오류 발생: {}", address, e);
-            throw new AiApiException("AI를 통한 아파트 가격 조회 중 오류가 발생했습니다.", e);
+            log.error("AI 분석 중 오류 발생", e);
+            return MarketPrice.builder().marketPrice(0L).info("AI 오류").build();
         }
     }
 
