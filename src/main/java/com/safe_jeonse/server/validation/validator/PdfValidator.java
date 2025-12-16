@@ -16,7 +16,7 @@ public class PdfValidator implements ConstraintValidator<ValidPdf, MultipartFile
     @Override
     public boolean isValid(MultipartFile file, ConstraintValidatorContext constraintValidatorContext) {
         if (file == null || file.isEmpty()) {
-            return false;
+            return true;
         }
         try {
             String detectedType = tika.detect(file.getInputStream());
