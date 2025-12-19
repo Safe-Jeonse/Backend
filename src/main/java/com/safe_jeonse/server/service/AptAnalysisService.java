@@ -3,7 +3,6 @@ package com.safe_jeonse.server.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.safe_jeonse.server.dto.response.AiApartmentPriceResponse;
 import com.safe_jeonse.server.dto.response.MarketPrice;
-import com.safe_jeonse.server.exception.AiApiException;
 import com.safe_jeonse.server.prompt.PromptManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -71,7 +70,10 @@ public class AptAnalysisService {
     }
 
     private String performSearch(String address, String apartmentName, String exclusiveArea) {
-        String addressWithDong = address.replaceAll("\\d+호", "").trim();
+        // 1) 호 제거
+        String addressNoHo = address == null ? "" : address.replaceAll("\\d+호", "").trim();
+        // 2) 광역/시군구 등 행정구역 제거 + 도로명/건물번호 결합
+        String normalizedAddress = normalizeAddressForSearch(addressNoHo);
 
         // 전용면적 정수화 및 시장 통용 평형 환산
         String roundedArea = exclusiveArea;
@@ -79,38 +81,58 @@ public class AptAnalysisService {
         try {
             double area = Double.parseDouble(exclusiveArea);
             roundedArea = String.valueOf((int) area);
-
-            // 전용면적 → 시장 통용 평형 변환 (공급면적 기준)
-            // 실제 시장에서는 공용면적 포함한 '공급면적' 기준으로 평형 표기
             marketPyeong = convertToMarketPyeong((int) area);
-
         } catch (Exception e) {
             // 변환 실패 시 원래 값 사용
         }
 
-        // 시장 통용 평형을 포함하여 검색 정확도 향상
+        // "34평평형" 같이 중복 토큰을 만들지 않게 보정
+        String pyeongToken = marketPyeong.trim();
+        if (pyeongToken.endsWith("평형")) {
+            pyeongToken = pyeongToken.substring(0, pyeongToken.length() - 2);
+        }
+
+        // 성공 케이스와 유사하게: 도로명+번호는 붙이고(분당로190), 동은 공백 유지(102동)
         String query1 = String.format("%s %s %s㎡ %s평형 매매",
-                addressWithDong, apartmentName, roundedArea, marketPyeong);
+                normalizedAddress, apartmentName, roundedArea, pyeongToken);
 
-        log.info("1차 검색 시도 (전용{}㎡ = 시장{}평형): {}", roundedArea, marketPyeong, query1);
+        log.info("1차 검색 시도(정규화주소): {}", query1);
         String result1 = tavilySearchService.search(query1);
-
         log.info("1차 검색 결과 길이: {} (참고출처 포함)", result1 != null ? result1.length() : 0);
 
-        // 결과가 충분하면 반환
         if (result1 != null && result1.length() > 100) {
             return result1;
         }
-        else {
-            return null;
-        }
+        return null;
+    }
 
+    /**
+     * 검색 정확도를 위해 주소를 정규화합니다.
+     * - 앞단 행정구역 제거
+     * - 도로명+건물번호는 붙여서 만듦
+     * - 동/단지명은 공백으로 분리 유지
+     */
+    private String normalizeAddressForSearch(String raw) {
+        if (raw == null) return "";
+        String s = raw.trim();
+
+        // 행정구역 제거 (문장 앞부분에 있을 때만)
+        s = s.replaceFirst("^(경기도?|서울특별시|부산광역시|대구광역시|인천광역시|광주광역시|대전광역시|울산광역시|세종특별자치시|경기|서울|부산|대구|인천|광주|대전|울산|세종)\\s+", "");
+        s = s.replaceFirst("^([가-힣]+시|[가-힣]+군)\\s+", "");
+        s = s.replaceFirst("^([가-힣]+구)\\s+", "");
+
+        // 도로명 + 건물번호 결합: "분당로 190" -> "분당로190"
+        // (뒤에 동이 이어지면 공백 유지: "분당로190 102동")
+        s = s.replaceAll("([\\p{IsAlphabetic}\\p{IsHangul}]+[로길])\\s+(\\d+)", "$1$2");
+
+        // 과도한 공백 정리
+        s = s.replaceAll("\\s{2,}", " ").trim();
+        return s;
     }
 
     /**
      * 전용면적(㎡)을 시장에서 통용되는 평형으로 변환
      * 실제 부동산 시장에서는 공급면적 기준으로 평형을 표기
-     *
      * 예시: 84㎡ 전용면적 = "34평형" (공급면적 약 112㎡ ≈ 34평)
      *
      * @param exclusiveArea 전용면적 (㎡)
@@ -167,12 +189,12 @@ public class AptAnalysisService {
 
         String userPrompt = String.format("""
                 %s
-                
+
                 ---
                 [참고: 웹 검색 결과]
-                다음은 위 정보를 찾기 위해 수행한 Tavily 검색 결과입니다. 
+                다음은 위 정보를 찾기 위해 수행한 Tavily 검색 결과입니다.
                 아래 검색 결과를 바탕으로 위 지침에 따라 분석을 수행해주세요.
-                
+
                 %s
                 """, instructionPrompt, searchResult);
 
