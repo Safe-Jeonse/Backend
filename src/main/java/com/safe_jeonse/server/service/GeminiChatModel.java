@@ -40,56 +40,30 @@ public class GeminiChatModel implements ChatModel {
 
     @Override
     public ChatResponse call(Prompt prompt) {
-        int maxRetries = 3;
-        long waitTime = 2000; // 초기 대기 시간 2초
+        try {
+            // Gemini API 요청 형식으로 변환 (Google Search 포함)
+            Map<String, Object> requestBody = buildGeminiRequest(prompt);
 
-        for (int i = 0; i <= maxRetries; i++) {
-            try {
-                // Gemini API 요청 형식으로 변환 (Google Search 포함)
-                Map<String, Object> requestBody = buildGeminiRequest(prompt);
+            String requestJson = objectMapper.writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(requestBody);
 
-                String requestJson = objectMapper.writerWithDefaultPrettyPrinter()
-                        .writeValueAsString(requestBody);
+            // Gemini API 호출 (재시도 없이 1회만 호출)
+            String response = restClient.post()
+                    .uri("/models/{model}:generateContent?key={apiKey}", model, apiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(requestBody)
+                    .retrieve()
+                    .body(String.class);
 
-                // Gemini API 호출
-                String response = restClient.post()
-                        .uri("/models/{model}:generateContent?key={apiKey}", model, apiKey)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(requestBody)
-                        .retrieve()
-                        .body(String.class);
+            // 응답 파싱
+            ChatResponse chatResponse = parseGeminiResponse(response);
 
+            return chatResponse;
 
-                // 응답 파싱
-                ChatResponse chatResponse = parseGeminiResponse(response);
-
-                return chatResponse;
-
-            } catch (Exception e) {
-                // 429 에러 체크 (Rate Limit)
-                if (isRateLimitError(e) && i < maxRetries) {
-                    log.warn("Gemini API 429 Too Many Requests 발생. {}ms 후 재시도합니다. (시도 {}/{})",
-                            waitTime, i + 1, maxRetries);
-                    try {
-                        Thread.sleep(waitTime);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw new RuntimeException("재시도 대기 중 인터럽트 발생", ie);
-                    }
-                    waitTime *= 2; // 지수 백오프 (2초 -> 4초 -> 8초)
-                    continue;
-                }
-
-                log.error("Gemini API 호출 실패", e);
-                throw new RuntimeException("Gemini API 호출 중 오류 발생: " + e.getMessage(), e);
-            }
+        } catch (Exception e) {
+            log.error("Gemini API 호출 실패: {}", e.getMessage());
+            throw new RuntimeException("Gemini API 호출 중 오류 발생: " + e.getMessage(), e);
         }
-        throw new RuntimeException("Gemini API 호출 실패: 최대 재시도 횟수 초과");
-    }
-
-    private boolean isRateLimitError(Exception e) {
-        String msg = e.getMessage();
-        return msg != null && (msg.contains("429") || msg.contains("Too Many Requests") || msg.contains("quota"));
     }
 
     /**

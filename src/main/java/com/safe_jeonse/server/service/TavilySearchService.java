@@ -59,7 +59,7 @@ public class TavilySearchService {
             }
 
             if (sources.length() > 0) {
-                //log.info("Tavily 검색 출처:\n{}", sources);
+                log.info("Tavily 검색 출처 (쿼리: '{}'):\n{}", query, sources);
                 return answer + "\n\n[참고 출처]\n" + sources.toString();
             }
 

@@ -58,7 +58,7 @@ public class AptAnalysisService {
                     .build();
         }
 
-        // 1. Tavily 검색 수행 (재시도 로직 포함)
+        // 1. Tavily 검색 수행 (1회만 호출)
         String searchResult = performSearch(address, apartmentName, exclusiveArea);
 
         if (searchResult == null || searchResult.isEmpty()) {
@@ -73,32 +73,91 @@ public class AptAnalysisService {
     private String performSearch(String address, String apartmentName, String exclusiveArea) {
         String addressWithDong = address.replaceAll("\\d+호", "").trim();
 
-        // 전용면적 정수화 (예: 84.99 -> 84) - 검색 정확도 향상
+        // 전용면적 정수화 및 시장 통용 평형 환산
         String roundedArea = exclusiveArea;
+        String marketPyeong = "";
         try {
             double area = Double.parseDouble(exclusiveArea);
             roundedArea = String.valueOf((int) area);
+
+            // 전용면적 → 시장 통용 평형 변환 (공급면적 기준)
+            // 실제 시장에서는 공용면적 포함한 '공급면적' 기준으로 평형 표기
+            marketPyeong = convertToMarketPyeong((int) area);
+
         } catch (Exception e) {
             // 변환 실패 시 원래 값 사용
         }
 
-        String query1 = String.format("%s %s %s㎡ 매매", addressWithDong, apartmentName, roundedArea);
+        // 시장 통용 평형을 포함하여 검색 정확도 향상
+        String query1 = String.format("%s %s %s㎡ %s평형 매매",
+                addressWithDong, apartmentName, roundedArea, marketPyeong);
 
-        log.info("1차 검색 시도: {}", query1);
+        log.info("1차 검색 시도 (전용{}㎡ = 시장{}평형): {}", roundedArea, marketPyeong, query1);
         String result1 = tavilySearchService.search(query1);
+
+        log.info("1차 검색 결과 길이: {} (참고출처 포함)", result1 != null ? result1.length() : 0);
 
         // 결과가 충분하면 반환
         if (result1 != null && result1.length() > 100) {
-            //log.info("1차 검색 성공 (길이: {})", result1.length());
             return result1;
         }
+        else {
+            return null;
+        }
 
-        // 2차 시도: 동 정보 제외 검색 (데이터 확보 우선)
-        log.info("1차 검색 결과 부족, 2차 검색 시도 (동 정보 제외)");
-        String addressWithoutDong = address.replaceAll("\\d+동", "").replaceAll("\\d+호", "").trim();
-        String query2 = String.format("%s %s %s㎡ 매매", addressWithoutDong, apartmentName, roundedArea);
+    }
 
-        return tavilySearchService.search(query2);
+    /**
+     * 전용면적(㎡)을 시장에서 통용되는 평형으로 변환
+     * 실제 부동산 시장에서는 공급면적 기준으로 평형을 표기
+     *
+     * 예시: 84㎡ 전용면적 = "34평형" (공급면적 약 112㎡ ≈ 34평)
+     *
+     * @param exclusiveArea 전용면적 (㎡)
+     * @return 시장 통용 평형 (예: 84㎡ → "34평")
+     */
+    private String convertToMarketPyeong(int exclusiveArea) {
+        // 주요 평형대 매핑 (전용면적 → 시장 통용 평형)
+        // 공급면적 = 전용면적 ÷ 전용률 (일반적으로 60~75%, 평균 70%)
+
+        // 국민 평수 (가장 흔한 케이스)
+        if (exclusiveArea >= 82 && exclusiveArea <= 86) {
+            return "34평"; // 84㎡, 85㎡ 이하 세금 혜택
+        }
+        // 중소형
+        else if (exclusiveArea >= 58 && exclusiveArea <= 62) {
+            return "25평"; // 59㎡
+        }
+        else if (exclusiveArea >= 48 && exclusiveArea <= 52) {
+            return "20평"; // 49㎡
+        }
+        else if (exclusiveArea >= 38 && exclusiveArea <= 42) {
+            return "16평"; // 39㎡
+        }
+        // 중형
+        else if (exclusiveArea >= 73 && exclusiveArea <= 78) {
+            return "32평"; // 74㎡
+        }
+        else if (exclusiveArea >= 98 && exclusiveArea <= 102) {
+            return "40평"; // 99㎡
+        }
+        // 대형
+        else if (exclusiveArea >= 114 && exclusiveArea <= 120) {
+            return "45평"; // 114㎡
+        }
+        else if (exclusiveArea >= 125 && exclusiveArea <= 135) {
+            return "49평"; // 128㎡
+        }
+        else if (exclusiveArea >= 145 && exclusiveArea <= 155) {
+            return "59평"; // 149㎡
+        }
+        else {
+            // 매핑되지 않은 면적은 대략적인 공급면적 환산
+            // 전용률 70% 가정: 공급면적 = 전용면적 ÷ 0.7
+            int supplyArea = (int) (exclusiveArea / 0.7);
+            int pyeong = (int) (supplyArea / 3.3);
+            return pyeong + "평";
+        }
     }
 
     private MarketPrice analyzeWithAi(String searchResult, String address, String apartmentName, String exclusiveArea) {
@@ -127,11 +186,62 @@ public class AptAnalysisService {
             ChatResponse response = chatModel.call(prompt);
 
             String aiResponse = response.getResult().getOutput().getText();
+            log.info("AI 원본 응답: {}", aiResponse);
+
             AiApartmentPriceResponse priceData = parseAiResponse(aiResponse);
 
             if (priceData.hasNoData()) {
                 log.warn("AI가 거래 데이터 없음을 보고함");
                 return MarketPrice.builder().marketPrice(0L).info("데이터 없음").build();
+            }
+
+            // 비정상적으로 높은 가격 검증 및 자동 수정 (대형 평형 가격 혼입 또는 단위 오류)
+            double exclusiveAreaDouble = Double.parseDouble(exclusiveArea);
+            long pricePerSqm = priceData.averagePrice() / (long) exclusiveAreaDouble;
+
+            // 1차 검증: ㎡당 가격이 1억 이상이면 단위 오류 (10배 잘못 계산)
+            if (pricePerSqm > 100_000_000) {
+                long correctedPrice = priceData.averagePrice() / 10;
+                long correctedPricePerSqm = correctedPrice / (long) exclusiveAreaDouble;
+
+                log.warn("단위 오류 감지 및 자동 수정! 원본: {}원 → 수정: {}원 (㎡당 {}원 → {}원)",
+                        priceData.averagePrice(), correctedPrice, pricePerSqm, correctedPricePerSqm);
+
+                // 수정된 가격이 합리적인지 재검증 (㎡당 1천만원~8천만원 범위)
+                if (correctedPricePerSqm >= 10_000_000 && correctedPricePerSqm <= 80_000_000) {
+                    String info = String.format("APARTMENT - AI(단위수정): %s %s㎡ (평균 %d건, 신뢰도: %s, 출처: %s)",
+                            apartmentName, exclusiveArea, priceData.transactionCount(),
+                            priceData.confidence(), priceData.dataSource());
+
+                    log.info("단위 수정 후 정상 범위 진입: {}원 - {}", correctedPrice, info);
+
+                    return MarketPrice.builder()
+                            .marketPrice(correctedPrice)
+                            .info(info)
+                            .build();
+                }
+            }
+
+            // 2차 검증: ㎡당 가격이 8천만원 이상이면 다른 평형 혼입 의심
+            if (pricePerSqm > 80_000_000) {
+                log.warn("비정상적으로 높은 가격 감지! averagePrice: {}원 (㎡당 {}원) - 다른 평형 가격 혼입 의심",
+                        priceData.averagePrice(), pricePerSqm);
+                log.warn("   요청 면적: {}㎡, 가격 범위: {}~{}",
+                        exclusiveArea, priceData.priceRange().min(), priceData.priceRange().max());
+                return MarketPrice.builder()
+                        .marketPrice(0L)
+                        .info("가격 검증 실패 (다른 평형 혼입 의심)")
+                        .build();
+            }
+
+            // 3차 검증: ㎡당 가격이 1천만원 미만이면 너무 낮음 (전세가 혼입 의심)
+            if (pricePerSqm < 10_000_000 && priceData.averagePrice() > 0) {
+                log.warn("비정상적으로 낮은 가격 감지! averagePrice: {}원 (㎡당 {}원) - 전세가 혼입 의심",
+                        priceData.averagePrice(), pricePerSqm);
+                return MarketPrice.builder()
+                        .marketPrice(0L)
+                        .info("가격 검증 실패 (전세가 혼입 의심)")
+                        .build();
             }
 
             if (!priceData.isReliable()) {
@@ -150,7 +260,11 @@ public class AptAnalysisService {
             String info = String.format("APARTMENT - AI: %s %s㎡ (평균 %d건, 신뢰도: %s, 출처: %s)",
                     apartmentName, exclusiveArea, priceData.transactionCount(), priceData.confidence(), priceData.dataSource());
 
-            log.info("AI 아파트 가격 조회 완료: {}원 - {}", priceData.averagePrice(), info);
+            log.info("AI 아파트 가격 조회 완료: {}원 (가격범위: {}~{}) - {}",
+                    priceData.averagePrice(),
+                    priceData.priceRange().min(),
+                    priceData.priceRange().max(),
+                    info);
 
             return MarketPrice.builder()
                     .marketPrice(priceData.averagePrice())

@@ -27,6 +27,9 @@ spring:
       max-file-size: 100MB
       max-request-size: 100MB    
   ai:
+    retry:
+      max-attempts: 1
+      on-client-errors: false
     openai:
       api-key: ${OPENAI_API_KEY}
       base-url: https://api.groq.com/openai
@@ -63,259 +66,120 @@ spring:
 prompts:
 
   apt-system-prompt: |
-    당신은 대한민국 부동산 시세 데이터 분석 전문가입니다.
-    제공된 웹 검색 결과(텍스트)를 분석하여 아파트의 '매매 시세', '실거래가'를 도출해야 합니다.
-    호수는 신경쓰지말고 주소와 동으로만 시세를 파악하세요.
+    부동산 시세 분석 전문가. 전세 사기 예방을 위해 정확한 매매가 도출.
 
-    **핵심 목표:**
-    전세 사기 예방을 위해 해당 물건의 '적정 매매 시세'를 파악하는 것입니다.
-    **절대 전세가를 매매가로 착각해서는 안 됩니다.**
+    **핵심 규칙:**
+    - 전세가를 매매가로 착각 금지
+    - 다른 평형 가격 혼입 금지
+    - 면적 표기: 84㎡(전용) = 34평형(시장), 59㎡ = 25평형
 
-    **분석 우선순위:**
-    1. **KB부동산 시세** (최근 실거래가) - 가장 신뢰할 수 있음
-    2. **네이버 부동산/호갱노노 매물 호가** (최저가와 최고가의 평균) - **실거래가 없으면 이것을 최우선으로 사용하세요.**
-    3. **국토부 실거래가** (단, '전세' 거래가 아닌 '매매' 거래인지 반드시 확인)
-    4. 위 데이터가 명확하지 않을 경우, 검색 결과 텍스트에 언급된 **최근 시세 정보**를 참고하여 추정하세요.
+    **우선순위:**
+    1. 네이버/호갱노노 현재 호가 (최신)
+    2. KB부동산 시세
+    3. 실거래가 (6개월 이내)
 
-    **데이터 추출 및 정제 규칙 (매우 중요):**
-    1. **전세가 철저 배제:** 
-       - 텍스트에 '전세', '월세', '보증금', '임대'라는 단어가 포함된 문장의 가격은 **절대** 추출하지 마세요.
-    2. **매매가 식별 및 추론:** 
-       - '매매', '매도', '거래가', '시세', '일반평균가' 키워드와 연결된 금액을 찾으세요.
-       - **KB부동산/호갱노노 링크 제목이나 설명에 있는 가격 정보도 적극적으로 활용하세요.**
-       - **주의:** "매매 10억 / 전세 6억" 처럼 같이 있는 경우 10억을 추출하세요.
-    3. **가격 검증 (Logic Check):**
-       - 만약 추출한 가격이 **5억~6억** 수준인데, 같은 단지의 다른 매물이나 과거 거래가 **10억 이상**이라면, 추출한 가격은 **전세가**일 확률이 99%입니다. 과감히 버리세요.
-       - 여러 가격이 발견되면, **더 높은 가격대**가 매매가일 가능성이 높습니다.
-    4. **단위 변환:** '억', '천' 단위를 정확히 숫자로 변환하세요. (예: 15억 3천 -> 1530000000)
+    **필수 규칙:**
+    1. 면적 필터링: 요청 면적(±5㎡)만 추출
+    2. 전세가 배제: '전세/월세/보증금/임대' 제외
+    3. 매매가만: '매매/거래가/호가/시세' 키워드 금액만
+    4. 검증: 주변 시세 2배 이상 차이나면 제외
+    5. 단위: 17억5천→1750000000, 14.5억→1450000000 (NOT 14500000000)
 
-    **응답 형식 (JSON만 출력):**
-    {
-      "averagePrice": 1500000000,
-      "confidence": "high",
-      "dataSource": "KB부동산 시세",
-      "transactionCount": 0,
-      "priceRange": {
-        "min": 1450000000,
-        "max": 1550000000
-      },
-      "note": "KB부동산 일반평균가 적용"
-    }
+    **응답 (JSON만):**
+    {"averagePrice":1500000000,"confidence":"high|medium|low|none","dataSource":"출처","transactionCount":3,"priceRange":{"min":1450000000,"max":1550000000},"note":"설명"}
 
-    **confidence 기준:**
-    - "high": KB시세 또는 명확한 매매 호가 다수 존재
-    - "medium": 매매 실거래가 존재하나 6개월 이상 경과
-    - "low": 텍스트/링크 제목 등에서 간접적으로 시세 추정 (전세가 아님을 확신할 때만)
-    - "none": 분석 가능한 매매 데이터가 전혀 없음 (averagePrice: 0)
-
-    **주의:** 
-    - JSON 외에 어떠한 설명도 덧붙이지 마세요.
-    - **의심스러우면 차라리 'none'을 반환하세요. 잘못된 전세가를 매매가로 내놓으면 치명적입니다.**
-    - "low": 실거래 없음 AND 매물 1~2건 존재 (호가 기준)
-    - "none": 아예 데이터 없음 (averagePrice: 0)
-    
-    **주의: 응답은 오직 JSON만 출력하고, 코드블록(```)이나 다른 설명 텍스트를 포함하지 마세요.**
+    confidence: high(KB시세/다수매물), medium(6개월+실거래), low(간접추정), none(데이터없음)
 
   apt-prompt: |
-    제공된 검색 결과를 사용하여 다음 아파트의 시세를 조회해주세요.
-
-    **분석 대상:**
+    **대상:**
     - 주소: {{address}}
-    - 아파트명: {{apartmentName}}
-    - 전용면적: {{exclusiveArea}}㎡
+    - 아파트: {{apartmentName}}
+    - 면적: {{exclusiveArea}}㎡ (이 면적만 추출)
 
-    **검색 지침 (Step-by-Step):**
-    1. 먼저 "{{apartmentName}} {{exclusiveArea}} 매매 실거래가" 키워드로 검색하여 최근 거래를 찾으세요.
-    2. 만약 특정 호수({{address}}의 상세 호수)에 대한 정보가 없다면, **같은 단지 내 동일 면적(타입)의 평균가**를 찾으세요.
-    3. 최근 실거래 내역이 없다면, "네이버 부동산 {{apartmentName}} 매매 호가"를 검색하여 **현재 올라와 있는 매물들의 평균 가격**을 계산하세요.
-    4. 1층이나 저층 매물의 경우 일반 시세보다 5~10% 낮게 책정하여 계산하세요.
+    **주의:**
+    - 쿼리: "84㎡ 34평형" 형태 (둘 다 동일 평형)
+    - 해당 면적 매물만 선택
+    - 현재 호가 우선 → 실거래가(6개월내)
+    - 전세가 아닌 매매가만
+    - 큰 평형 가격 혼입 금지
 
-    **주의사항:**
-    - 전세가가 아닌 **'매매가'**를 찾아야 합니다.
-    - 블로그의 추측성 글보다는 네이버 부동산, 호갱노노, 아실, 국토부 실거래가 데이터를 우선 신뢰하세요.
-    - **중요: 오직 JSON만 출력하세요. 어떠한 설명 텍스트나 코드블록(```)도 포함하지 마세요.**
-    - **응답 예시:**
-    {"averagePrice": 850000000, "confidence": "high", "dataSource": "네이버 부동산", "transactionCount": 5, "priceRange": {"min": 830000000, "max": 870000000}, "note": "최근 3개월 실거래 평균"}
+    **출력:** JSON만 (코드블록 없이)
+    예: {"averagePrice":1700000000,"confidence":"high","dataSource":"네이버 호가","transactionCount":3,"priceRange":{"min":1650000000,"max":1750000000},"note":"{{exclusiveArea}}㎡ 3건"}
 
   
 
   deep-prompt: |
-    아래는 전세 매물 입력값과 등기부 파싱 결과(선택)야. 이를 근거로 OpenAPI 1.2.0의 AnalysisReport 스키마와 동일한 JSON을 생성해.
-        
-        [오늘의 날짜]
-        - date: {{localDateTime}}
-    
-        [요청 입력]
-        - address: {{address}}            # 사용자가 입력한 주소(문자열)
-        - leaseDeposit: {{leaseDeposit}}  # 전세 보증금(원, 정수)
-        - landlord: {{landlord}}          # 임대인 이름(선택, 없으면 빈 문자열)
+    전세 매물 입력값과 등기부 파싱 결과를 분석하여 JSON 생성.
 
-        [유저의 실거래가 및 시스템 추정 시세]
-        - userMarketPrice: {{userMarketPrice}}
-        - marketPrice: {{marketPrice}}
+    [입력 데이터]
+    - date: {{localDateTime}}
+    - address: {{address}}
+    - leaseDeposit: {{leaseDeposit}}
+    - landlord: {{landlord}}
+    - userMarketPrice: {{userMarketPrice}}
+    - marketPrice: {{marketPrice}}
+    - buildingLedgerResult: {{buildingLedgerResult}}
+    - parseResultDto: (등기부 파싱 결과 - 갑구/을구 소유권/채권 이력)
 
-        [건축물대장 분석 결과]
-        - result: {{buildingLedgerResult}}
-
-        [등기부 파싱 결과 ParseResultDto] 
-        - address: {{parseResultDto.address}}
-        - uniqueNumber: {{parseResultDto.uniqueNumber}}
-
-        - coverSection.mainBuildingInfo:
-          · address: {{parseResultDto.coverSection.mainBuildingInfo.address}}
-          · buildingName: {{parseResultDto.coverSection.mainBuildingInfo.buildingName}}
-          · structure: {{parseResultDto.coverSection.mainBuildingInfo.structure}}
-          · totalFloors: {{parseResultDto.coverSection.mainBuildingInfo.totalFloors}}
-
-        - coverSection.propertyInfo:
-          · floorAndUnit: {{parseResultDto.coverSection.propertyInfo.floorAndUnit}}
-          · structure: {{parseResultDto.coverSection.propertyInfo.structure}}
-          · area: {{parseResultDto.coverSection.propertyInfo.area}}
-        
-        - coverSection.landRights[]:
-        {{#parseResultDto.coverSection.landRights}}
-        · { type: "{{type}}", ratio: "{{ratio}}" }
-        {{/parseResultDto.coverSection.landRights}}
-
-        - gapguSection.ownershipHistory[]:
-        {{#parseResultDto.gapguSection.ownershipHistory}}
-        · { sequence: {{sequence}}, receiptDate: "{{receiptDate}}", cause: "{{cause}}", ownerName: "{{ownerName}}", dealPrice: {{dealPrice}} }
-        {{/parseResultDto.gapguSection.ownershipHistory}}
-
-        - eulguSection.lienHistory[]:
-        {{#parseResultDto.eulguSection.lienHistory}}
-        · { sequence: {{sequence}}, type: "{{type}}", receiptDate: "{{receiptDate}}", cause: "{{cause}}", debtor: "{{debtor}}", creditor: "{{creditor}}", amount: {{amount}}, isTerminated: {{isTerminated}} }
-        {{/parseResultDto.eulguSection.lienHistory}}
-        
-        [작성 규칙]
-        1) analysisType = hasRegistry
-        2) propertyInfo.address = 요청 address 우선. 등기부 주소와 다르면 "주소/표시 불일치" 항목을 생성.
-        3) marketPrice 추정 규칙은 시스템 프롬프트를 따른다(정수 원).
-        4) riskRatio = (leaseDeposit / marketPrice) * 100 (반드시 100을 곱할 것. 예: 75.0). hasRegistry=false면 null 또는 미포함.
-           - 단, riskRatio < 10.0 이면 "입력 단위 오류(0 누락) 또는 월세 보증금 가능성"을 코멘트에 명시할 것.
-        5) detailedRiskAnalysis는 최소 4개 이상(등기부 없으면 3개 이상) 생성. 각 항목은 구체 근거 수치/날짜 포함.
-        6) overallRiskLevel은 규칙(전세가율+강화 규칙)에 따라 산정.
-        7) aiGeneralComment는 2~4문장 한국어.
-        8) humanChecklist는 8~10개. isEssential=true 위주.
-        9) 출력은 아래 JSON 스키마(키 순서 유지) 그대로. 오직 JSON만.
-        10) 소유권 이전, 근저당권 설정에 관한 데이터는 [오늘의 날짜]를 참고해서 비교해야함
-        그리고 코멘트에 가장 최근의 소유권 변동이 일어난지 몇년 됬는지 반드시 작성해
-        분석요소
-        - 소유권 이전 횟수 빈도수 (짧은 기간에 많을 수록 감점)
-
-        [최종 출력 JSON 스키마 예시(키 순서 고정)]
-        {
-          "reportId": "{{reportId}}",                       // 서버에서 UUID 바인딩하거나, 임시로 "{{reportId}}" 그대로 둬도 됨
-          "analysisType": (true|false),
-          "overallRiskLevel": "안전|주의|위험|고위험",
-          "propertyInfo": {
-            "address": "string",
-            "marketPrice": 123456789,                       // 정수(원)
-            "leaseDeposit": {{request.leaseDeposit}},       // 정수(원)
-            "riskRatio": 76.9                               // 소수점 1자리; hasRegistry=false면 null 또는 생략
-          },
-          "detailedRiskAnalysis": [
-            {
-              "category": "전세가율",
-              "riskLevel": "안전|주의|위험",
-              "comment": "구체 근거를 포함한 한국어 설명"
-            }
-            // 최소 5~10개 항목 추가(선순위 채권 분석, 말소기준권리, 소유권 변동, 건축물/대지권(건축물대장 분석 결과), 주소/표시 불일치, 특약 필요사항 등)
-          ],
-          "aiGeneralComment": "4~5문장의 한국어 종합 코멘트",
-          "humanChecklist": [
-            {
-              "title": "임대인 신분/대리권 확인",
-              "description": "계약 당일, 등기부 소유주와 임대인/대리인 신분증·위임장 일치 확인. 위임장 원본·인감증명서 포함.",
-              "isEssential": true
-            }
-            // 5~10개 항목 추가(확정일자·전입신고, 말소기준권리 재검증, 추가근저당 금지 특약, 체납 관리비/공과금 확인, 건축물대장·용도·불법개조, 계약 전 최신 등기부 재발급 일자, 임대인 신용상태 등)
-            // 이미 분석된 결과는 제외하고 출력할 것(ex: 건축물대장 분석 결과가 존재하면 제외)
-          ]
-        }
+    [작성 규칙]
+    1) analysisType = true (등기부 있음)
+    2) propertyInfo 필드 (필수):
+       - {"address":"{{address}}", "marketPrice":{{marketPrice}}, "leaseDeposit":{{leaseDeposit}}, "riskRatio":XX.X}
+       - address: 입력받은 주소 그대로 사용
+       - marketPrice: 입력받은 marketPrice 값 (정수)
+       - leaseDeposit: 입력받은 leaseDeposit 값 (정수)
+       - riskRatio: (leaseDeposit / marketPrice) × 100 (소수점 1자리)
+    3) riskRatio < 10.0 → "단위 오류 또는 월세 보증금" 경고
+    4) detailedRiskAnalysis 최소 5개 (category 필드 필수 작성):
+       - {"category":"전세가율", "riskLevel":"안전|주의|위험", "comment":"..."}
+       - {"category":"선순위 채권 분석", "riskLevel":"...", "comment":"..."}
+       - {"category":"소유권 변동", "riskLevel":"...", "comment":"..."}
+       - {"category":"건축물대장 분석", "riskLevel":"...", "comment":"..."}
+       - {"category":"특약 필요사항", "riskLevel":"...", "comment":"..."}
+    5) overallRiskLevel: system prompt 규칙 준수
+    6) aiGeneralComment: 3~5문장 (첫 문장에 판정 등급+근거 명시)
+    7) humanChecklist: 8~10개 (title, description 필드 필수 작성, isEssential=true 위주)
+       - {"title":"임대인 신분 확인", "description":"...", "isEssential":true}
+    8) 소유권 변동: date 기준 경과 년수 명시
+    9) JSON만 출력 (코드블록 금지)
 
   quick-prompt: |
-    "등기부 미첨부" 시나리오다. 아래 입력만을 근거로 OpenAPI 1.2.0의 AnalysisReport 스키마와 동일한 JSON을 생성하라.
+    등기부 미첨부 시나리오 분석. JSON 생성.
 
-        [요청 입력]
-        - address: {{address}}            # 사용자가 입력한 주소(문자열)
-        - leaseDeposit: {{leaseDeposit}}  # 전세 보증금(원, 정수)
-        - landlord: {{landlord}}          # 임대인 이름(선택, 없으면 빈 문자열)
-    
-        [건축물대장 분석 결과]
-        - result: {{buildingLedgerResult}}
+    [입력 데이터]
+    - address: {{address}}
+    - leaseDeposit: {{leaseDeposit}}
+    - landlord: {{landlord}}
+    - userMarketPrice: {{userMarketPrice}}
+    - marketPrice: {{marketPrice}}
+    - buildingLedgerResult: {{buildingLedgerResult}}
 
-        [유저의 실거래가 및 시스템 추정 시세]
-        - userMarketPrice: {{userMarketPrice}}
-        - marketPrice: {{marketPrice}}
+    [작성 규칙]
+    1) analysisType = false (등기부 없음)
+    2) propertyInfo 필드 (필수):
+       - {"address":"{{address}}", "marketPrice":{{marketPrice}}, "leaseDeposit":{{leaseDeposit}}, "riskRatio":null}
+       - address: 입력받은 주소 그대로 사용
+       - marketPrice: 입력받은 marketPrice 값 (정수)
+       - leaseDeposit: 입력받은 leaseDeposit 값 (정수)
+       - riskRatio: null (등기부 없음)
+    3) comment에 "추정 전세가율" 언급 가능
+       - 추정 전세가율 < 10% → "단위 오류 또는 월세" 경고
+    4) detailedRiskAnalysis 최소 5개 (category 필드 필수 작성):
+       - {"category":"전세가율(추정)", "riskLevel":"...", "comment":"..."}
+       - {"category":"등기부 미첨부 리스크", "riskLevel":"주의", "comment":"..."}
+       - {"category":"특약 필요사항", "riskLevel":"...", "comment":"..."}
+       - (선택) {"category":"지역/시세 변동성", ...}
+       - (선택) {"category":"건축물대장", ...}
+    5) overallRiskLevel: 보수적 판정 (데이터 부재로 한 단계 상향 가능)
+    6) aiGeneralComment: 2~4문장 (등기부 미첨부 불확실성 강조)
+    7) humanChecklist: 8~10개 (title, description 필드 필수 작성)
+       - {"title":"최신 등기부 즉시 발급", "description":"계약 전 최신 등기부로 권리변동 확인", "isEssential":true}
+    8) JSON만 출력 (코드블록 금지)
 
-        [전제]
-        - hasRegistry: false                      # 등기부 파싱 결과 없음
-
-        [작성 규칙]
-        1) analysisType = false
-        2) propertyInfo.address = 요청 address 사용.
-        3) marketPrice는 시스템 프롬프트의 추정 규칙을 적용해 보수적으로 산출(정수 원). 등기부 데이터가 없으므로 추정 근거를 comment에 남긴다.
-        4) riskRatio는 null로 두거나 생략한다(권장). 수치가 필요하면 comment 내부에 “추정 전세가율”로 설명만 한다.
-           - 단, 추정 전세가율이 10% 미만이면 "입력 단위 오류(0 누락) 또는 월세 보증금 가능성"을 언급할 것.
-        5) detailedRiskAnalysis는 최소 5개 이상 작성. 권장 카테고리:
-           - "전세가율(추정)"
-           - "등기부 미첨부 리스크"
-           - "특약 필요사항"
-           - (선택) "지역/시세 변동성", "건축물/대지권(추정 한계)"
-           각 항목은 riskLevel ∈ {안전, 주의, 위험} 중 선택하고, comment에 추정 근거/불확실성을 구체적으로 기재한다.
-        6) overallRiskLevel은 보수적으로 산정한다.
-           - 전세가율 추정 구간(내부적으로 계산 가능하나 riskRatio 필드는 null 유지)과 데이터 부재 페널티를 반영해 한 단계 상향 가능.
-        7) aiGeneralComment는 2~4문장 한국어로 핵심 리스크와 조치를 요약(등기부 미첨부로 인한 불확실성 강조).
-        8) humanChecklist는 8~10개 작성, isEssential=true 위주.
-           예시: 최신 등기부 즉시 발급 요청, 임대인 신원·대리권 확인, 확정일자·전입신고 당일 처리, 체납 관리비·공과금 확인,
-                추가근저당 금지·원상복구·인도/명도 특약 삽입, 건축물대장/용도/불법개조 확인 등.
-        9) 출력은 아래 JSON 스키마(키 순서 유지) 그대로. 오직 JSON만 출력한다(코드블록/설명 금지).
-
-        [최종 출력 JSON 스키마(키 순서 고정)]
-        {
-          "reportId": "{{reportId}}",
-          "analysisType": false,
-          "overallRiskLevel": "안전|주의|위험|고위험",
-          "propertyInfo": {
-            "address": "{{address}}",
-            "marketPrice": 123456789,
-            "leaseDeposit": {{leaseDeposit}},
-            "riskRatio": null  // 등기부 미첨부 시 null 또는 필드 생략
-          },
-          "detailedRiskAnalysis": [
-            {
-              "category": "전세가율(추정)",
-              "riskLevel": "안전|주의|위험",
-              "comment": "보증금과 유사매물 가정치로 추정한 시세 근거, 내부 계산된 추정 전세가율(수치는 참고로만 언급), 불확실성 범위 등 구체 서술"
-            },
-            {
-              "category": "등기부 미첨부 리스크",
-              "riskLevel": "주의",
-              "comment": "선순위 권리·압류·경매 여부 확인 불가로 인한 불확실성 및 보수적 판단 필요성 명시"
-            },
-            {
-              "category": "특약 필요사항",
-              "riskLevel": "주의",
-              "comment": "추가근저당 금지, 체납 정산, 원상복구, 인도·명도, 중도 말소 요구 등 권고 특약 제시"
-            }
-            // 필요시 "지역/시세 변동성", "건축물/대지권(추정 한계)" 등 1~4개 항목 추가
-          ],
-          "aiGeneralComment": "2~4문장의 한국어 종합 코멘트(등기부 미첨부에 따른 보수 판단과 즉시 발급 권고 포함)",
-          "humanChecklist": [
-            {
-              "title": "최신 등기부 즉시 발급",
-              "description": "계약 전·당일 등기부 최신본으로 권리변동(근저당/압류/경매 등) 확인.",
-              "isEssential": true
-            }
-            // 4~7개 항목 추가(확정일자·전입신고, 말소기준권리 재검증, 추가근저당 금지 특약, 체납 관리비/공과금 확인, 건축물대장·용도·불법개조, 계약 전 최신 등기부 재발급 일자 등)
-            // 이미 분석된 결과는 제외하고 출력할 것(ex: 건축물대장 분석 결과가 존재하면 제외)
-          ]
-        }
   system: |
     [역할]
     너는 대한민국 부동산 전세사기 예방 분석 전문가 AI다. 입력된 데이터와 아래 규칙에 따라 냉정하게 분석하여 JSON으로 응답하라.
-
+  
     [열거 및 제약 조건 (필수 준수)]
     1. overallRiskLevel 값의 범위: {"안전", "주의", "위험", "고위험"}
        - 오직 이 4개 문자열 중 하나만 출력해야 한다.
@@ -337,11 +201,11 @@ prompts:
     1. 안전 기준가(SafePrice) 산출:
        (건물 유형인 'info' 값에 따라 다른 배율을 적용한다)
        (등기부등본 분석결과에 근저당 설정되어있으면 이를 고려해서 계산할 것)
-       
+
        CASE A: 아파트 (info == "APARTMENT")
          - SafePrice = marketPrice × 0.8
          - 이유: 아파트는 시세가 투명하지만, 경매 낙찰가율을 고려하여 실거래가의 80%를 안전 한도로 본다.
-       
+
        CASE B: 그 외 (VILLA, DAGAGU, OFFICETEL 등)
          - 만약 marketPrice가 '공시가격' 기반이라면(시스템 조회): SafePrice = marketPrice × 1.26
          - 만약 marketPrice가 '사용자 입력 시세' 기반이라면: SafePrice = marketPrice × 0.8
@@ -356,7 +220,7 @@ prompts:
        - 아래 기준을 기본으로 하되, '3. 추가 전세사기 예방 로직' 및 기타 리스크 요소를 종합하여 최종 등급을 결정한다.
        - 최종 등급은 발견된 리스크 중 가장 높은 단계를 따른다.
        - 판정 기준은 '시세(marketPrice)'가 아니라 위에서 계산한 'SafePrice'다.
-       
+
        * 안전 (Safe): leaseDeposit ≤ SafePrice
        * 주의 (Warning): leaseDeposit > SafePrice AND leaseDeposit ≤ (SafePrice × 1.1)
          (보증보험 가입 불가 구간)
@@ -385,32 +249,90 @@ prompts:
        - Comment: "입력하신 시세는 객관적 지표(공시가/실거래가)보다 과도하게 높습니다. 깡통전세 사기 위험이 있으니 주의하세요."
 
     5. 상세 분석(detailedRiskAnalysis) 작성 가이드:
-       - [전세가율]: "매매가 대비 전세가율은 OO%입니다."라고 명시. (전세금 / 매매가 * 100).
-       - 절대 "안전가 대비 전세가율"이라는 표현을 쓰지 말 것. 대신 "전세금이 안전가(SafePrice)보다 낮아 안전합니다" 형태로 서술.
-       - [선순위 채권]: 
-         * 등기부 을구에 근저당권이 없거나, 있더라도 모두 말소(isTerminated=true)된 경우: riskLevel="안전", comment="등기부상 모든 근저당권이 말소되어 선순위 채권이 없습니다."
-         * 말소되지 않은 근저당권이 있는 경우: "선순위 채권금액 + 보증금"이 시세의 몇 %인지 구체적으로 명시하고 위험성을 경고.
-       - [권리 침해]: 등기부에 압류, 가압류, 가처분 등이 발견되면 "즉시 계약 중단"을 강력히 권고.
-       - [신탁 여부]: 소유자가 신탁사일 경우, "임대인(위탁자)과 계약하면 효력이 없을 수 있음"을 명시.
-       - [건물 유형]: 아파트는 '경매 방어력(80%)', 빌라는 '공시가 기준(126%)'을 적용했음을 명시.
-       - [특약사항]: 깡통전세 방지 특약, 체납 확인 특약 등 추천.
-       - [다가구일 경우]: "선순위 보증금 확인 필수" 경고 항목 추가.
+       **중요: category 필드는 반드시 문자열로 작성 (null 절대 금지)**
+       
+       올바른 예시:
+       [
+         {"category": "전세가율", "riskLevel": "안전", "comment": "매매가 대비 전세가율은 4.3%입니다."},
+         {"category": "선순위 채권 분석", "riskLevel": "안전", "comment": "등기부상 모든 근저당권이 말소되어 선순위 채권이 없습니다."},
+         {"category": "소유권 변동", "riskLevel": "안전", "comment": "최근 3년간 소유권 변동 이력이 없습니다."}
+       ]
+       
+       잘못된 예시 (사용 금지):
+       [
+         {"category": null, "riskLevel": "안전", "comment": "..."}
+       ]
+       
+       필수 카테고리:
+       - "전세가율": 매매가 대비 전세가율 명시
+       - "선순위 채권 분석": 근저당권 말소 여부
+       - "소유권 변동": 최근 변동 이력
+       - "건축물대장 분석": 주용도 및 위반 여부
+       - "특약 필요사항": 깡통전세 방지 특약
 
     6. 휴먼 체크리스트(humanChecklist):
-       - 8 ~ 10개 내외, isEssential=true 위주로 구성.
-       - 예: 임대인 신원·대리권 확인, 등기부 최신본 재발급일 확인, 전입신고·확정일자 당일 처리, 선순위 채권 변동 감시, 체납 관리비·공과금 확인, 특약(추가근저당 금지/원상복구/인도·명도/중도말소 등) 삽입, 건축물대장 용도·불법개조 여부 확인
-       - 임대인 체납 및 채무 여부, HUG 가입 여부, 공인중개사(업무상태, 신원 확인 보증보험 가입) 등.
-       - 필수 포함: 등기부등본 '갑구(소유권)'/'을구(근저당)' 확인, 국세/지방세 완납증명서 요구.
-       - 다가구(DAGAGU): '전입세대 열람 내역' 확인 필수.
-       - 근생(ILLEGAL): '전세보증보험 가입 불가' 확인 필수.
-       - 신탁 물건일 경우: '신탁원부 발급' 및 '수탁자 동의서' 확인 필수.
+       **중요: title과 description은 반드시 문자열로 작성 (null 절대 금지)**
+       
+       올바른 예시:
+       [
+         {"title": "임대인 신분/대리권 확인", "description": "계약 당일 등기부 소유주와 임대인 신분증 일치 확인", "isEssential": true},
+         {"title": "등기부 최신본 재발급", "description": "계약 전 최신 등기부로 권리변동 확인", "isEssential": true},
+         {"title": "전입신고·확정일자 당일 처리", "description": "잔금일 당일 전입신고와 확정일자 즉시 처리", "isEssential": true}
+       ]
+       
+       잘못된 예시 (사용 금지):
+       [
+         {"title": null, "description": null, "isEssential": true}
+       ]
+       
+       필수 포함 항목 (8~10개):
+       - "임대인 신분/대리권 확인"
+       - "등기부 최신본 재발급"
+       - "전입신고·확정일자 당일 처리"
+       - "체납 관리비·공과금 확인"
+       - "특약 삽입"
+       - "건축물대장 확인"
+       - "국세/지방세 완납증명"
+       - "HUG 전세보증보험 가입"
+       + 추가 사항
 
     7. AI 종합 코멘트(aiGeneralComment):
     - 핵심 리스크와 조치 권고를 3~5문장으로 요약.
     - **반드시 overallRiskLevel을 '안전/주의/위험/고위험' 중 무엇으로 판정했는지와 그 결정적인 근거를 첫 문장에 명시하라.**
+    - 분석 결과를 대략적으로 요약한 문장도 요약에 포함해야함.
       (예: "전세가율이 안전 범위 내에 있고 선순위 채권이 없어 '안전' 등급으로 판정했습니다.")
 
+    [JSON 출력 형식 예시]
+    {
+      "reportId": "",
+      "analysisType": true,
+      "overallRiskLevel": "안전",
+      "propertyInfo": {
+        "address": "분당로xxx xxx동 xxx호",
+        "marketPrice": 1700000000,
+        "leaseDeposit": 65000000,
+        "riskRatio": 4.3
+      },
+      "detailedRiskAnalysis": [
+        {"category": "전세가율", "riskLevel": "안전", "comment": "매매가 대비 전세가율은 4.3%입니다."},
+        {"category": "선순위 채권 분석", "riskLevel": "안전", "comment": "등기부상 모든 근저당권이 말소되어 선순위 채권이 없습니다."}
+      ],
+      "aiGeneralComment": "전세가율이 안전 범위 내에 있고 선순위 채권이 없어 '안전' 등급으로 판정했습니다.",
+      "humanChecklist": [
+        {"title": "임대인 신분/대리권 확인", "description": "계약 당일 등기부 소유주와 임대인 신분증 일치 확인", "isEssential": true}
+      ]
+    }
+
     [검증]
+    - **필수 필드 검증**: 
+      * propertyInfo의 address, marketPrice, leaseDeposit, riskRatio는 절대 null이면 안 됨
+      * detailedRiskAnalysis의 category는 절대 null이면 안 됨
+      * humanChecklist의 title과 description은 절대 null이면 안 됨
+    - propertyInfo 필드 작성:
+      * address: 입력받은 주소 값 그대로 사용 (문자열)
+      * marketPrice: 입력받은 marketPrice 값 (정수)
+      * leaseDeposit: 입력받은 leaseDeposit 값 (정수)
+      * riskRatio: (leaseDeposit / marketPrice) × 100 (소수점 1자리, analysisType=false일 때는 null)
     - riskRatio 필드는 반드시 (leaseDeposit / marketPrice) * 100을 계산한 결과값이어야 한다.
     - 예시: 보증금 3억, 시세 4억이면 0.75가 아니라 "75.0"이어야 한다. (소수점 1자리까지 표기)
     - 만일 userMarketPrice와 marketPrice와 괴리가 크지 않다면 (leaseDeposit / userMarketPrice * 100)로 계산한다.
@@ -420,7 +342,7 @@ prompts:
       "전세가율이 비정상적으로 낮습니다(10% 미만). 보증금 단위를 '만원'이 아닌 '원' 단위로 정확히 입력했는지(예: 6억 5천 -> 650000000) 확인해주세요. 혹시 월세 보증금인가요?"
     - 모든 코멘트에는 가능한 한 입력 데이터(날짜, 금액, 권리종류 등)에서 유추한 구체 근거를 포함한다.
     - 모호하면 보수적으로 판단하고 그 이유를 comment에 명시한다.
-    - 사용자가 입력한 시세와 SafePrice와 너무 괴리가 크면 시세 거품 경고 항목을 상세 분석에 작성해야한다. 
+    - 사용자가 입력한 시세와 SafePrice와 너무 괴리가 크면 시세 거품 경고 항목을 상세 분석에 작성해야한다.
 
 logging:
   level:
